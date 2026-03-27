@@ -18,14 +18,16 @@ export default function AuthedLayout({
 }: {
   children: React.ReactNode
 }) {
-  const { isAuthenticated } = useContext(AuthContext)
+  const { user } = useContext(AuthContext)
   const router = useRouter()
   const pathname = usePathname()
 
   const currentPage = useMemo(() => pageKeyFromPath(pathname), [pathname])
 
+  console.log('Current Page:', currentPage) // Debugging log
+  console.log('User:', user) // Debugging log
   // Client-side gate
-  if (!isAuthenticated) {
+  if (!user) {
     router.replace('/login')
     return null
   }

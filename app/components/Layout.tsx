@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/app/components/ui/Button'
 import { Headphones, LogOut } from 'lucide-react'
 import { AuthContext } from '../context'
+import Image from 'next/image'
 
 interface LayoutProps {
   children: React.ReactNode
@@ -82,12 +83,20 @@ export function Layout({ children, onNavigate, currentPage }: LayoutProps) {
               </div>
 
               <div className="h-9 w-9 rounded-full bg-zinc-200 overflow-hidden ring-2 ring-white">
-                <img
+                {/* <img
                   src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(
                     currentUser?.name || ''
                   )}`}
                   alt={currentUser?.name}
                   className="h-full w-full object-cover"
+                /> */}
+                <Image
+                  src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(
+                    currentUser?.name || ''
+                  )}`}
+                  alt={currentUser?.name || 'User avatar'}
+                  fill
+                  className="object-cover"
                 />
               </div>
 

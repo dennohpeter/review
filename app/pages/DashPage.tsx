@@ -26,7 +26,7 @@ import {
 } from 'lucide-react'
 import { formatDate } from '@/app/lib/utils'
 import { Task, TaskStatus, User } from '@/app/types'
-import { AppContext } from '../context'
+import { AppContext, AuthContext } from '../context'
 import { useRouter } from 'next/router'
 
 type ViewMode = 'card' | 'list'
@@ -64,7 +64,7 @@ const FILTER_OPTIONS: {
   },
 ]
 
-export function HomePage() {
+export function DashPage() {
   const router = useRouter()
 
   const onNavigate = (page: string, taskId?: string) => {
@@ -75,6 +75,7 @@ export function HomePage() {
   }
 
   const { tasks, bulkAssignTasks } = useContext(AppContext)
+  const { user: currentUser } = useContext(AuthContext)
   const invitedUsers: User[] = []
 
   const [viewMode, setViewMode] = useState<ViewMode>('card')
@@ -157,7 +158,7 @@ export function HomePage() {
         </div>
       </div>
 
-      {currentUser.role === 'reviewer' && visibleTasks.length === 0 && (
+      {currentUser?.role === 'reviewer' && visibleTasks.length === 0 && (
         <div className="p-12 text-center bg-zinc-50 rounded-xl border border-dashed border-zinc-200">
           <UserIcon className="h-10 w-10 text-zinc-300 mx-auto mb-4" />
           <h3 className="text-lg font-semibold text-zinc-900 mb-1">
