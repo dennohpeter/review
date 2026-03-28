@@ -1,9 +1,8 @@
 'use client'
 
-import { useContext, useMemo } from 'react'
+import { useMemo } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { Layout } from '@/app/components/Layout'
-import { AuthContext } from '../context'
 
 function pageKeyFromPath(path: string) {
   if (path === '/') return 'dashboard'
@@ -18,19 +17,10 @@ export default function AuthedLayout({
 }: {
   children: React.ReactNode
 }) {
-  const { user } = useContext(AuthContext)
   const router = useRouter()
   const pathname = usePathname()
 
   const currentPage = useMemo(() => pageKeyFromPath(pathname), [pathname])
-
-  console.log('Current Page:', currentPage) // Debugging log
-  console.log('User:', user) // Debugging log
-  // Client-side gate
-  if (!user) {
-    router.replace('/login')
-    return null
-  }
 
   const handleNavigate = (page: string, taskId?: string) => {
     switch (page) {

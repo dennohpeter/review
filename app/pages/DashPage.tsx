@@ -26,8 +26,9 @@ import {
 } from 'lucide-react'
 import { formatDate } from '@/app/lib/utils'
 import { Task, TaskStatus, User } from '@/app/types'
-import { AppContext, AuthContext } from '../context'
-import { useRouter } from 'next/router'
+import { AppContext } from '@/app/context'
+import { useRouter } from 'next/navigation'
+import { useAuth } from '@/app/hooks'
 
 type ViewMode = 'card' | 'list'
 type StatusFilter = 'all' | TaskStatus
@@ -75,7 +76,7 @@ export function DashPage() {
   }
 
   const { tasks, bulkAssignTasks } = useContext(AppContext)
-  const { user: currentUser } = useContext(AuthContext)
+  const { user: currentUser } = useAuth()
   const invitedUsers: User[] = []
 
   const [viewMode, setViewMode] = useState<ViewMode>('card')

@@ -1,5 +1,5 @@
-import { generateId } from '../lib'
-import { Task } from '../types'
+import { generateId } from '@/app/lib'
+import { Task } from '@/app/types'
 
 type UseAppParams = {
   tasks: Task[]

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useState, useRef, useContext } from 'react'
+import React, { useEffect, useState, useRef, useMemo } from 'react'
 import { Button } from '@/app/components/ui/Button'
 import { Input } from '@/app/components/ui/Input'
 import {
@@ -10,6 +10,7 @@ import {
   CardTitle,
   CardFooter,
 } from '@/app/components/ui/Card'
+import { useAuth } from '@/app/hooks/useAuth'
 import {
   Headphones,
   ArrowRight,
@@ -17,7 +18,6 @@ import {
   AlertCircle,
   ArrowLeft,
 } from 'lucide-react'
-import { AuthContext } from '@/app/context'
 
 export const LoginPage = () => {
   const {
@@ -28,11 +28,16 @@ export const LoginPage = () => {
     initiateLogin,
     verifyCode,
     resetLogin,
-  } = useContext(AuthContext)
+  } = useAuth()
 
   const [email, setEmail] = useState('')
   const [code, setCode] = useState(['', '', '', '', '', ''])
   const inputRefs = useRef<(HTMLInputElement | null)[]>([])
+
+  const NEXT_OTP_LENGTH = parseInt(
+    process.env.NEXT_PUBLIC_OTP_LENGTH || '6',
+    10
+  )
 
   useEffect(() => {
     if (loginStep === 'code' && inputRefs.current[0]) {
@@ -45,19 +50,17 @@ export const LoginPage = () => {
     if (email) initiateLogin(email)
   }
 
+  const fullCode = useMemo(() => code.join(''), [code])
+
   const handleCodeChange = (index: number, value: string) => {
-    if (value.length > 1) return
+    const digit = value.replace(/\D/g, '').slice(-1)
 
     const newCode = [...code]
-    newCode[index] = value
+    newCode[index] = digit
     setCode(newCode)
 
-    if (value && index < 5) inputRefs.current[index + 1]?.focus()
-
-    if (index === 5 && value) {
-      const fullCode = newCode.join('')
-      if (fullCode.length === 6) verifyCode(fullCode)
-    }
+    if (digit && index < NEXT_OTP_LENGTH - 1)
+      inputRefs.current[index + 1]?.focus()
   }
 
   const handleKeyDown = (
@@ -69,7 +72,31 @@ export const LoginPage = () => {
     }
   }
 
-  const handleVerify = () => verifyCode(code.join(''))
+  const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    e.preventDefault()
+    const pasted = e.clipboardData
+      .getData('text')
+      .replace(/\D/g, '')
+      .slice(0, NEXT_OTP_LENGTH)
+
+    if (!pasted) return
+
+    const next = Array(NEXT_OTP_LENGTH).fill('')
+    pasted.split('').forEach((char, idx) => {
+      next[idx] = char
+    })
+
+    setCode(next)
+
+    const focusIndex = Math.min(pasted.length, NEXT_OTP_LENGTH - 1)
+    inputRefs.current[focusIndex]?.focus()
+  }
+
+  const handleVerify = () => {
+    if (fullCode.length === NEXT_OTP_LENGTH) {
+      verifyCode(fullCode)
+    }
+  }
 
   return (
     <div className="min-h-screen bg-zinc-50 flex flex-col items-center justify-center p-4">
@@ -128,7 +155,7 @@ export const LoginPage = () => {
                 Check your email
               </CardTitle>
               <p className="text-sm text-zinc-500 text-center">
-                We sent a 6-digit code to{' '}
+                We sent a {NEXT_OTP_LENGTH}-digit code to{' '}
                 <span className="font-medium text-zinc-900">{loginEmail}</span>
               </p>
             </CardHeader>
@@ -142,10 +169,13 @@ export const LoginPage = () => {
                       inputRefs.current[idx] = el
                     }}
                     type="text"
+                    inputMode="numeric"
+                    autoComplete={idx === 0 ? 'one-time-code' : 'off'}
                     maxLength={1}
                     value={digit}
                     onChange={(e) => handleCodeChange(idx, e.target.value)}
                     onKeyDown={(e) => handleKeyDown(idx, e)}
+                    onPaste={handlePaste}
                     className="w-10 h-12 text-center text-xl font-bold border border-zinc-200 rounded-md focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 outline-none transition-all"
                   />
                 ))}
@@ -164,7 +194,7 @@ export const LoginPage = () => {
                 onClick={handleVerify}
                 className="w-full"
                 isLoading={isLoading}
-                disabled={code.some((d) => !d)}
+                disabled={fullCode.length !== NEXT_OTP_LENGTH}
               >
                 Verify & Sign In
               </Button>

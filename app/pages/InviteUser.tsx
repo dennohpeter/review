@@ -1,7 +1,6 @@
 'use client'
 
 import React, { useState } from 'react'
-import { useAuth } from '@/app/context/AuthContext'
 import { Button } from '@/app/components/ui/Button'
 import { Input } from '@/app/components/ui/Input'
 import {
@@ -13,13 +12,14 @@ import {
 import { Badge } from '@/app/components/ui/Badge'
 import { UserRole } from '@/app/types'
 import { Mail, Plus, Trash2, ArrowLeft } from 'lucide-react'
+import { useAuth } from '../hooks'
 
 interface InviteUserProps {
   onNavigate: (page: string) => void
 }
 
 export function InviteUser({ onNavigate }: InviteUserProps) {
-  const { invitedUsers, inviteUser, removeUser, user } = useAuth()
+  const { reviewers: invitedUsers, inviteUser, removeUser, user } = useAuth()
 
   const [email, setEmail] = useState('')
   const [name, setName] = useState('')

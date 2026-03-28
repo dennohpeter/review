@@ -3,7 +3,7 @@
 import { createContext } from 'react'
 import { User, UserRole } from '@/app/types'
 
-interface AuthContextType {
+export interface AuthContextType {
   user: User | null
   reviewers: User[]
   isAuthenticated: boolean
@@ -22,23 +22,4 @@ interface AuthContextType {
   removeUser: (id: string) => void
 }
 
-export const defaultValue: AuthContextType = {
-  user: null,
-  reviewers: [],
-  isAuthenticated: false,
-  isLoading: false,
-
-  loginStep: 'email',
-  loginEmail: '',
-  loginError: null,
-
-  initiateLogin: async () => {},
-  verifyCode: async () => {},
-  logout: () => {},
-  resetLogin: () => {},
-
-  inviteUser: () => {},
-  removeUser: () => {},
-}
-
-export const AuthContext = createContext<AuthContextType>(defaultValue)
+export const AuthContext = createContext<AuthContextType | undefined>(undefined)

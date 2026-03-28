@@ -1,11 +1,11 @@
 'use client'
 
-import React, { useContext } from 'react'
+import React from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/app/components/ui/Button'
 import { Headphones, LogOut } from 'lucide-react'
-import { AuthContext } from '../context'
 import Image from 'next/image'
+import { useAuth } from '../hooks/useAuth'
 
 interface LayoutProps {
   children: React.ReactNode
@@ -15,7 +15,7 @@ interface LayoutProps {
 
 export function Layout({ children, onNavigate, currentPage }: LayoutProps) {
   const router = useRouter()
-  const { user: currentUser, logout } = useContext(AuthContext)
+  const { user: currentUser, logout } = useAuth()
 
   const handleLogout = () => {
     logout()
@@ -95,8 +95,10 @@ export function Layout({ children, onNavigate, currentPage }: LayoutProps) {
                     currentUser?.name || ''
                   )}`}
                   alt={currentUser?.name || 'User avatar'}
-                  fill
+                  width={36}
+                  height={36}
                   className="object-cover"
+                  unoptimized
                 />
               </div>
 
