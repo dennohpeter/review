@@ -28,7 +28,7 @@ import { formatDate } from '@/app/lib/utils'
 import { Task, TaskStatus, User } from '@/app/types'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/app/hooks'
-import { createClient } from '@supabase/supabase-js'
+import { createSupabaseBrowserClient } from '../lib/supabase/browser'
 
 type ViewMode = 'card' | 'list'
 type StatusFilter = 'all' | TaskStatus
@@ -80,10 +80,7 @@ const FILTER_OPTIONS: {
   },
 ]
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
-)
+const supabase = createSupabaseBrowserClient()
 
 function deriveTaskStatus(reviews: ReviewRow[]): TaskStatus {
   if (!reviews.length) return 'pending'

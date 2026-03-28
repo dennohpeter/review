@@ -18,7 +18,7 @@ import {
   User as UserIcon,
 } from 'lucide-react'
 import { useAuth } from '@/app/hooks'
-import { createClient } from '@supabase/supabase-js'
+import { createSupabaseBrowserClient } from '../lib/supabase/browser'
 
 interface ReviewInterfaceProps {
   taskId: string
@@ -51,10 +51,7 @@ type Reviewer = {
 
 type TaskStatus = 'pending' | 'approved' | 'changes_requested'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
-)
+const supabase = createSupabaseBrowserClient()
 
 function deriveTaskStatus(reviews: ReviewRow[]): TaskStatus {
   if (!reviews.length) return 'pending'
