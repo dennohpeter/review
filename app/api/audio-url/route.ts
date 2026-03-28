@@ -7,7 +7,6 @@ import { NextResponse } from 'next/server'
 export async function GET(req: Request) {
   try {
     const supabase = await createSupabaseServerClient()
-
     // 🔐 ensure user is logged in
     const {
       data: { user },

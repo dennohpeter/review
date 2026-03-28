@@ -3,11 +3,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { User, UserRole } from '../types'
 import { AuthContext, AuthContextType } from './AuthContext'
-import { createSupabaseBrowserClient } from '../lib/supabase/browser'
+import { supabase } from '../lib/supabase/browser'
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const supabase = useMemo(() => createSupabaseBrowserClient(), [])
-
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(false)
 
@@ -21,36 +19,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLoginError(null)
   }, [])
 
-  const initiateLogin = useCallback(
-    async (email: string) => {
-      setIsLoading(true)
-      setLoginError(null)
+  const initiateLogin = useCallback(async (email: string) => {
+    setIsLoading(true)
+    setLoginError(null)
 
-      const cleanEmail = email.trim().toLowerCase()
+    const cleanEmail = email.trim().toLowerCase()
 
-      const { error } = await supabase.auth.signInWithOtp({
-        email: cleanEmail,
-        options: {
-          // INVITE-ONLY: prevents creating new users
-          shouldCreateUser: false,
-        },
-      })
+    const { error } = await supabase.auth.signInWithOtp({
+      email: cleanEmail,
+      options: {
+        // INVITE-ONLY: prevents creating new users
+        shouldCreateUser: false,
+      },
+    })
 
-      if (error) {
-        setLoginError(
-          error.message ||
-            'No account found with this email. Please contact an admin for an invite.'
-        )
-        setIsLoading(false)
-        return
-      }
-
-      setLoginEmail(cleanEmail)
-      setLoginStep('code')
+    if (error) {
+      setLoginError(
+        error.message ||
+          'No account found with this email. Please contact an admin for an invite.'
+      )
       setIsLoading(false)
-    },
-    [supabase]
-  )
+      return
+    }
+
+    setLoginEmail(cleanEmail)
+    setLoginStep('code')
+    setIsLoading(false)
+  }, [])
 
   const verifyCode = useCallback(
     async (code: string) => {
@@ -74,7 +69,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIsLoading(false)
       window.location.href = '/'
     },
-    [loginEmail, supabase]
+    [loginEmail]
   )
   const logout = useCallback(async () => {
     setIsLoading(true)
@@ -83,7 +78,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     resetLogin()
     setIsLoading(false)
     window.location.href = '/login'
-  }, [resetLogin, supabase])
+  }, [resetLogin])
 
   const inviteUser = useCallback(
     (email: string, name: string, role: UserRole) => {
@@ -172,7 +167,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       mounted = false
       listener.subscription.unsubscribe()
     }
-  }, [supabase])
+  }, [])
 
   const reviewers = useMemo(() => {
     if (!user) return []
