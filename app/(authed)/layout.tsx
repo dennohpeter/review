@@ -1,8 +1,9 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { Layout } from '@/app/components/Layout'
+import { useAuth } from '../hooks'
 
 function pageKeyFromPath(path: string) {
   if (path === '/') return 'dashboard'
@@ -21,6 +22,7 @@ export default function AuthedLayout({
   const pathname = usePathname()
 
   const currentPage = useMemo(() => pageKeyFromPath(pathname), [pathname])
+  const { user, isLoading } = useAuth()
 
   const handleNavigate = (page: string, taskId?: string) => {
     switch (page) {
@@ -41,6 +43,11 @@ export default function AuthedLayout({
     }
   }
 
+  useEffect(() => {
+    if (!isLoading && !user) {
+      router.replace('/login')
+    }
+  }, [user, isLoading, router])
   return (
     <Layout onNavigate={handleNavigate} currentPage={currentPage}>
       {children}
