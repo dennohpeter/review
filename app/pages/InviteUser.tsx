@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { Button } from '@/app/components/ui/Button'
 import { Input } from '@/app/components/ui/Input'
 import {
@@ -11,30 +11,114 @@ import {
 } from '@/app/components/ui/Card'
 import { Badge } from '@/app/components/ui/Badge'
 import { UserRole } from '@/app/types'
-import { Mail, Plus, Trash2, ArrowLeft } from 'lucide-react'
+import { Mail, Plus, ArrowLeft, Users, Shield } from 'lucide-react'
 import { useAuth } from '../hooks'
 
 interface InviteUserProps {
   onNavigate: (page: string) => void
 }
 
+type ReviewerUser = {
+  id: string
+  name: string
+  email: string
+  role: 'reviewer' | 'admin'
+  avatar?: string
+}
+
 export function InviteUser({ onNavigate }: InviteUserProps) {
-  const { reviewers: invitedUsers, inviteUser, removeUser, user } = useAuth()
+  const { user } = useAuth()
 
   const [email, setEmail] = useState('')
   const [name, setName] = useState('')
   const [role, setRole] = useState<UserRole>('reviewer')
+
+  const [users, setUsers] = useState<ReviewerUser[]>([])
+  const [loadingUsers, setLoadingUsers] = useState(true)
+  const [submitting, setSubmitting] = useState(false)
+
   const [successMsg, setSuccessMsg] = useState('')
+  const [errorMsg, setErrorMsg] = useState('')
 
-  const handleInvite = (e: React.FormEvent) => {
+  const loadUsers = async () => {
+    setLoadingUsers(true)
+    setErrorMsg('')
+
+    try {
+      const res = await fetch('/api/admin/reviewers')
+      const json = await res.json()
+
+      if (!res.ok) {
+        throw new Error(json.error || 'Failed to load users')
+      }
+
+      const reviewerUsers: ReviewerUser[] = json.reviewers ?? []
+
+      const allUsers: ReviewerUser[] = [
+        ...(user
+          ? [
+              {
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                role: user.role as 'reviewer' | 'admin',
+                avatar: user.avatar,
+              },
+            ]
+          : []),
+        ...reviewerUsers.filter((u) => u.id !== user?.id),
+      ]
+
+      setUsers(allUsers)
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Failed to load users')
+    } finally {
+      setLoadingUsers(false)
+    }
+  }
+
+  useEffect(() => {
+    loadUsers()
+  }, [])
+
+  const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!email || !name) return
+    if (!email.trim() || !name.trim()) return
 
-    inviteUser(email, name, role)
-    setEmail('')
-    setName('')
-    setSuccessMsg(`Invitation sent to ${email}`)
-    setTimeout(() => setSuccessMsg(''), 3000)
+    setSubmitting(true)
+    setErrorMsg('')
+    setSuccessMsg('')
+
+    try {
+      const res = await fetch('/api/admin/invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: email.trim().toLowerCase(),
+          name: name.trim(),
+          role,
+        }),
+      })
+
+      const json = await res.json()
+
+      if (!res.ok) {
+        throw new Error(json.error || 'Failed to invite user')
+      }
+
+      setSuccessMsg(`User created for ${email.trim().toLowerCase()}`)
+      setEmail('')
+      setName('')
+      setRole('reviewer')
+
+      await loadUsers()
+
+      setTimeout(() => setSuccessMsg(''), 3000)
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Failed to invite user')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -52,19 +136,24 @@ export function InviteUser({ onNavigate }: InviteUserProps) {
         <div>
           <h1 className="text-3xl font-bold text-zinc-900">Team Management</h1>
           <p className="text-zinc-600">
-            Invite and manage users who can access the platform.
+            Create and manage users who can access the platform.
           </p>
         </div>
       </div>
 
+      {errorMsg && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          {errorMsg}
+        </div>
+      )}
+
       <div className="grid md:grid-cols-3 gap-8">
-        {/* Invite Form */}
         <div className="md:col-span-1">
           <Card>
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
                 <Plus className="h-5 w-5" />
-                Invite New User
+                Add New User
               </CardTitle>
             </CardHeader>
 
@@ -119,8 +208,8 @@ export function InviteUser({ onNavigate }: InviteUserProps) {
                   </div>
                 </div>
 
-                <Button type="submit" className="w-full">
-                  Send Invite
+                <Button type="submit" className="w-full" isLoading={submitting}>
+                  Create User
                 </Button>
 
                 {successMsg && (
@@ -133,73 +222,67 @@ export function InviteUser({ onNavigate }: InviteUserProps) {
           </Card>
         </div>
 
-        {/* User List */}
         <div className="md:col-span-2">
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Active & Invited Users</CardTitle>
+              <CardTitle className="text-lg">Current Users</CardTitle>
             </CardHeader>
 
             <div className="divide-y divide-zinc-100">
-              {invitedUsers.map((u) => (
-                <div
-                  key={u.id}
-                  className="p-4 flex items-center justify-between hover:bg-zinc-50 transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 bg-zinc-100 rounded-full flex items-center justify-center text-zinc-500 font-medium">
-                      {u.name.charAt(0)}
-                    </div>
-
-                    <div>
-                      <div className="font-medium text-zinc-900 flex items-center gap-2">
-                        {u.name}
-                        {u.id === user?.id && (
-                          <span className="text-xs text-zinc-400">(You)</span>
-                        )}
-                      </div>
-
-                      <div className="text-sm text-zinc-500 flex items-center gap-1">
-                        <Mail className="h-3 w-3" />
-                        {u.email}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-4">
-                    <div className="flex flex-col items-end gap-1">
-                      <Badge
-                        variant={u.role === 'admin' ? 'default' : 'outline'}
-                        className={u.role === 'admin' ? 'bg-zinc-800' : ''}
-                      >
-                        {u.role}
-                      </Badge>
-
-                      <span
-                        className={`text-xs ${
-                          u.status === 'active'
-                            ? 'text-emerald-600'
-                            : 'text-amber-600'
-                        }`}
-                      >
-                        {u.status === 'active' ? 'Active' : 'Invite Pending'}
-                      </span>
-                    </div>
-
-                    {u.id !== user?.id && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="text-zinc-400 hover:text-red-600 hover:bg-red-50"
-                        onClick={() => removeUser(u.id)}
-                        title="Remove User"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    )}
-                  </div>
+              {loadingUsers ? (
+                <div className="p-6 text-sm text-zinc-500">
+                  Loading users...
                 </div>
-              ))}
+              ) : users.length === 0 ? (
+                <div className="p-6 text-sm text-zinc-500">No users found.</div>
+              ) : (
+                users.map((u) => (
+                  <div
+                    key={u.id}
+                    className="p-4 flex items-center justify-between hover:bg-zinc-50 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 bg-zinc-100 rounded-full flex items-center justify-center text-zinc-500 font-medium">
+                        {u.name.charAt(0)}
+                      </div>
+
+                      <div>
+                        <div className="font-medium text-zinc-900 flex items-center gap-2">
+                          {u.name}
+                          {u.id === user?.id && (
+                            <span className="text-xs text-zinc-400">(You)</span>
+                          )}
+                        </div>
+
+                        <div className="text-sm text-zinc-500 flex items-center gap-1">
+                          <Mail className="h-3 w-3" />
+                          {u.email}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-4">
+                      <div className="flex flex-col items-end gap-1">
+                        <Badge
+                          variant={u.role === 'admin' ? 'default' : 'outline'}
+                          className={u.role === 'admin' ? 'bg-zinc-800' : ''}
+                        >
+                          <span className="inline-flex items-center gap-1">
+                            {u.role === 'admin' ? (
+                              <Shield className="h-3 w-3" />
+                            ) : (
+                              <Users className="h-3 w-3" />
+                            )}
+                            {u.role}
+                          </span>
+                        </Badge>
+
+                        <span className="text-xs text-emerald-600">Active</span>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </Card>
         </div>

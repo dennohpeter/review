@@ -2,8 +2,6 @@ import { createSupabaseServerClient } from '@/app/lib/supabase/server'
 import { User } from '@/app/types'
 import { NextResponse } from 'next/server'
 
-export const runtime = 'nodejs'
-
 export async function GET() {
   const supabase = await createSupabaseServerClient()
 

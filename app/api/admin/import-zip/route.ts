@@ -5,8 +5,6 @@ import AdmZip from 'adm-zip'
 import { randomUUID } from 'crypto'
 import { NextResponse } from 'next/server'
 
-export const runtime = 'nodejs'
-
 const AUDIO_EXTENSIONS = new Set([
   '.mp3',
   '.wav',

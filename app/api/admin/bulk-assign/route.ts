@@ -1,8 +1,6 @@
 import { createSupabaseServerClient } from '@/app/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
-export const runtime = 'nodejs'
-
 export async function POST(req: Request) {
   const supabase = await createSupabaseServerClient()
 
