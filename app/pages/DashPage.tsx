@@ -188,6 +188,10 @@ export function DashPage() {
 
     if (currentUser) {
       loadDashboard()
+    } else {
+      setLoading(false)
+      setTasks([])
+      setReviewers([])
     }
     return () => {
       mounted = false

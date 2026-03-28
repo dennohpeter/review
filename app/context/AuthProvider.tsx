@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { User, UserRole } from '../types'
 import { AuthContext, AuthContextType } from './AuthContext'
 import { supabase } from '../lib/supabase/browser'
+import { useRouter } from 'next/navigation'
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
@@ -12,6 +13,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loginStep, setLoginStep] = useState<'email' | 'code'>('email')
   const [loginEmail, setLoginEmail] = useState('')
   const [loginError, setLoginError] = useState<string | null>(null)
+  const router = useRouter()
 
   const resetLogin = useCallback(() => {
     setLoginStep('email')
@@ -67,18 +69,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       setIsLoading(false)
-      window.location.href = '/'
+      router.replace('/')
     },
-    [loginEmail]
+    [loginEmail, router]
   )
   const logout = useCallback(async () => {
     setIsLoading(true)
-    await supabase.auth.signOut()
     setUser(null)
+    await supabase.auth.signOut()
     resetLogin()
     setIsLoading(false)
-    window.location.href = '/login'
-  }, [resetLogin])
+    router.replace('/login')
+  }, [resetLogin, router])
 
   const inviteUser = useCallback(
     (email: string, name: string, role: UserRole) => {
