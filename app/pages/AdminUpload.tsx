@@ -8,7 +8,6 @@ import {
   CardFooter,
 } from '@/app/components/ui/Card'
 import { Button } from '@/app/components/ui/Button'
-import { Input } from '@/app/components/ui/Input'
 import {
   UploadCloud,
   CheckCircle2,

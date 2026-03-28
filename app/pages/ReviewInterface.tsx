@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useState, useRef, useMemo, useContext } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Card } from '@/app/components/ui/Card'
 import { Button } from '@/app/components/ui/Button'
 import { Textarea } from '@/app/components/ui/Textarea'
@@ -17,22 +17,146 @@ import {
   ChevronDown,
   User as UserIcon,
 } from 'lucide-react'
-import { AppContext, AuthContext } from '../context'
+import { useAuth } from '@/app/hooks'
+import { createClient } from '@supabase/supabase-js'
 
 interface ReviewInterfaceProps {
   taskId: string
   onNavigate: (page: string, taskId?: string) => void
 }
 
-export function ReviewInterface({ taskId, onNavigate }: ReviewInterfaceProps) {
-  const { tasks, updateTaskStatus, assignTask } = useContext(AppContext)
-  const { invitedUsers } = useContext(AuthContext)
+type AudioItemRow = {
+  id: string
+  title: string
+  transcript_original: string
+  created_at: string
+  assigned_to: string | null
+  audio_key: string
+}
 
-  // Optional improvement: reviewers should only navigate within assigned tasks
+type ReviewRow = {
+  id: string
+  audio_id: string
+  decision: 'approve' | 'suggest'
+  suggested_text: string | null
+  comment: string | null
+  created_at: string
+}
+
+type Reviewer = {
+  id: string
+  name: string
+  email: string
+}
+
+type TaskStatus = 'pending' | 'approved' | 'changes_requested'
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
+)
+
+function deriveTaskStatus(reviews: ReviewRow[]): TaskStatus {
+  if (!reviews.length) return 'pending'
+  if (reviews.some((r) => r.decision === 'suggest')) return 'changes_requested'
+  if (reviews.some((r) => r.decision === 'approve')) return 'approved'
+  return 'pending'
+}
+
+export function ReviewInterface({ taskId, onNavigate }: ReviewInterfaceProps) {
+  const { user: currentUser } = useAuth()
+
+  const [tasks, setTasks] = useState<AudioItemRow[]>([])
+  const [reviewers, setReviewers] = useState<Reviewer[]>([])
+  const [reviewsByAudioId, setReviewsByAudioId] = useState<
+    Record<string, ReviewRow[]>
+  >({})
+  const [audioUrls, setAudioUrls] = useState<Record<string, string>>({})
+
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [assigning, setAssigning] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const [suggestion, setSuggestion] = useState('')
+  const [mode, setMode] = useState<'view' | 'edit'>('view')
+
+  const touchStartX = useRef<number | null>(null)
+  const touchEndX = useRef<number | null>(null)
+  const minSwipeDistance = 50
+
+  useEffect(() => {
+    let mounted = true
+
+    const load = async () => {
+      if (!currentUser) return
+
+      setLoading(true)
+      setError(null)
+
+      try {
+        const [
+          { data: audioItems, error: audioError },
+          { data: reviews, error: reviewsError },
+        ] = await Promise.all([
+          supabase
+            .from('audio_items')
+            .select(
+              'id,title,transcript_original,created_at,assigned_to,audio_key'
+            )
+            .order('created_at', { ascending: false }),
+          supabase
+            .from('reviews')
+            .select('id,audio_id,decision,suggested_text,comment,created_at')
+            .order('created_at', { ascending: false }),
+        ])
+
+        if (audioError) throw audioError
+        if (reviewsError) throw reviewsError
+
+        const taskRows = (audioItems ?? []) as AudioItemRow[]
+
+        const groupedReviews: Record<string, ReviewRow[]> = {}
+        for (const review of (reviews ?? []) as ReviewRow[]) {
+          groupedReviews[review.audio_id] =
+            groupedReviews[review.audio_id] ?? []
+          groupedReviews[review.audio_id].push(review)
+        }
+
+        let reviewerRows: Reviewer[] = []
+        if (currentUser.role === 'admin') {
+          const reviewerRes = await fetch('/api/admin/reviewers')
+          const reviewerJson = await reviewerRes.json()
+          if (reviewerRes.ok) {
+            reviewerRows = reviewerJson.reviewers ?? []
+          }
+        }
+
+        if (!mounted) return
+        setTasks(taskRows)
+        setReviewsByAudioId(groupedReviews)
+        setReviewers(reviewerRows)
+      } catch (err) {
+        if (!mounted) return
+        setError(
+          err instanceof Error ? err.message : 'Failed to load review page'
+        )
+      } finally {
+        if (mounted) setLoading(false)
+      }
+    }
+
+    load()
+    return () => {
+      mounted = false
+    }
+  }, [currentUser])
+
   const visibleTasks = useMemo(() => {
+    if (!currentUser) return []
     if (currentUser.role === 'admin') return tasks
-    return tasks.filter((t) => t.assignedTo === currentUser.id)
-  }, [tasks])
+    return tasks.filter((t) => t.assigned_to === currentUser.id)
+  }, [tasks, currentUser])
 
   const currentIndex = visibleTasks.findIndex((t) => t.id === taskId)
   const task = currentIndex >= 0 ? visibleTasks[currentIndex] : undefined
@@ -42,49 +166,64 @@ export function ReviewInterface({ taskId, onNavigate }: ReviewInterfaceProps) {
       ? visibleTasks[currentIndex + 1]
       : undefined
 
-  const [suggestion, setSuggestion] = useState('')
-  const [mode, setMode] = useState<'view' | 'edit'>('view')
+  const taskReviews = task ? (reviewsByAudioId[task.id] ?? []) : []
+  const status = deriveTaskStatus(taskReviews)
+  const latestSuggestion =
+    [...taskReviews].find((r) => r.decision === 'suggest')?.suggested_text ??
+    null
 
-  // Swipe State
-  const touchStartX = useRef<number | null>(null)
-  const touchEndX = useRef<number | null>(null)
-  const minSwipeDistance = 50
-
-  const reviewers = invitedUsers.filter((u) => u.role === 'reviewer')
-
-  const assigneeName = task?.assignedTo
-    ? invitedUsers.find((u) => u.id === task.assignedTo)?.name
+  const assigneeName = task?.assigned_to
+    ? reviewers.find((u) => u.id === task.assigned_to)?.name
     : undefined
 
   useEffect(() => {
-    if (!task) return
+    if (!task?.transcript_original) return
+    setSuggestion(latestSuggestion || task.transcript_original || '')
+    setMode('view')
+  }, [task?.id, latestSuggestion, task?.transcript_original])
 
-    if (task.suggestedChanges) {
-      setSuggestion(task.suggestedChanges)
-      setMode('view')
-    } else if (task.transcription) {
-      setSuggestion(task.transcription)
-      setMode('view')
-    } else {
-      setSuggestion('')
-      setMode('view')
+  useEffect(() => {
+    let mounted = true
+
+    const loadAudioUrl = async () => {
+      if (!task) return
+      if (audioUrls[task.id]) return
+
+      const res = await fetch(`/api/audio-url?audioId=${task.id}`)
+      const json = await res.json()
+
+      if (!mounted) return
+
+      if (!res.ok) {
+        setError(json.error || 'Failed to load audio')
+        return
+      }
+
+      setAudioUrls((prev) => ({
+        ...prev,
+        [task.id]: json.url,
+      }))
     }
-  }, [task?.id]) // depend on task id (avoids extra resets)
 
-  // Keyboard Navigation
+    loadAudioUrl()
+    return () => {
+      mounted = false
+    }
+  }, [task, audioUrls])
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (mode === 'edit') return
-
-      if (e.key === 'ArrowLeft' && prevTask) onNavigate('review', prevTask.id)
-      if (e.key === 'ArrowRight' && nextTask) onNavigate('review', nextTask.id)
+      if (e.key === 'ArrowLeft' && prevTask?.id)
+        onNavigate('review', prevTask.id)
+      if (e.key === 'ArrowRight' && nextTask?.id)
+        onNavigate('review', nextTask.id)
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [prevTask?.id, nextTask?.id, onNavigate, mode])
 
-  // Swipe Handlers
   const onTouchStart = (e: React.TouchEvent) => {
     touchEndX.current = null
     touchStartX.current = e.targetTouches[0].clientX
@@ -98,22 +237,124 @@ export function ReviewInterface({ taskId, onNavigate }: ReviewInterfaceProps) {
     if (touchStartX.current == null || touchEndX.current == null) return
     const distance = touchStartX.current - touchEndX.current
 
-    if (distance > minSwipeDistance && nextTask)
+    if (distance > minSwipeDistance && nextTask?.id)
       onNavigate('review', nextTask.id)
-    if (distance < -minSwipeDistance && prevTask)
+    if (distance < -minSwipeDistance && prevTask?.id)
       onNavigate('review', prevTask.id)
   }
 
-  if (!task) return <div>Task not found</div>
+  const refreshReviewsForTask = async (audioId: string) => {
+    const { data, error } = await supabase
+      .from('reviews')
+      .select('id,audio_id,decision,suggested_text,comment,created_at')
+      .eq('audio_id', audioId)
+      .order('created_at', { ascending: false })
 
-  const handleApprove = () => {
-    updateTaskStatus(task.id, 'approved')
-    onNavigate('dashboard')
+    if (error) throw error
+
+    setReviewsByAudioId((prev) => ({
+      ...prev,
+      [audioId]: (data ?? []) as ReviewRow[],
+    }))
   }
 
-  const handleRequestChanges = () => {
-    updateTaskStatus(task.id, 'changes_requested', suggestion)
-    onNavigate('dashboard')
+  const handleApprove = async () => {
+    if (!task) return
+    setSaving(true)
+    setError(null)
+
+    try {
+      const { error } = await supabase.from('reviews').insert({
+        audio_id: task.id,
+        decision: 'approve',
+        suggested_text: null,
+        comment: null,
+      })
+
+      if (error) throw error
+
+      await refreshReviewsForTask(task.id)
+      onNavigate('dashboard')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to approve')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleRequestChanges = async () => {
+    if (!task) return
+    if (!suggestion.trim()) {
+      setError('Please enter suggested changes before submitting.')
+      return
+    }
+
+    setSaving(true)
+    setError(null)
+
+    try {
+      const { error } = await supabase.from('reviews').insert({
+        audio_id: task.id,
+        decision: 'suggest',
+        suggested_text: suggestion.trim(),
+        comment: null,
+      })
+
+      if (error) throw error
+
+      await refreshReviewsForTask(task.id)
+      onNavigate('dashboard')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to submit changes')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleAssign = async (userId: string | undefined) => {
+    if (!task) return
+    setAssigning(true)
+    setError(null)
+
+    try {
+      const res = await fetch('/api/admin/bulk-assign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          taskIds: [task.id],
+          assignedTo: userId ?? null,
+        }),
+      })
+
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'Failed to assign reviewer')
+
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.id === task.id ? { ...t, assigned_to: userId ?? null } : t
+        )
+      )
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to assign reviewer')
+    } finally {
+      setAssigning(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="max-w-4xl mx-auto p-8 text-sm text-zinc-500">
+        Loading task...
+      </div>
+    )
+  }
+
+  if (!task) {
+    return (
+      <div className="max-w-4xl mx-auto p-8 text-sm text-zinc-500">
+        Task not found
+      </div>
+    )
   }
 
   return (
@@ -123,7 +364,6 @@ export function ReviewInterface({ taskId, onNavigate }: ReviewInterfaceProps) {
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
     >
-      {/* Header Navigation Bar */}
       <div className="flex items-center justify-between">
         <Button
           variant="ghost"
@@ -163,17 +403,17 @@ export function ReviewInterface({ taskId, onNavigate }: ReviewInterfaceProps) {
         </div>
       </div>
 
-      <div className="flex items-start justify-between">
+      <div className="flex items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-3 mb-2">
             <h1 className="text-2xl font-bold text-zinc-900">{task.title}</h1>
-            <Badge status={task.status} />
+            <Badge status={status} />
           </div>
 
-          <div className="flex items-center gap-4 text-zinc-500 text-sm">
+          <div className="flex items-center gap-4 text-zinc-500 text-sm flex-wrap">
             <span>
               Task ID: {task.id} • Created{' '}
-              {new Date(task.createdAt).toLocaleDateString()}
+              {new Date(task.created_at).toLocaleDateString()}
             </span>
 
             <span className="flex items-center gap-1.5">
@@ -190,22 +430,31 @@ export function ReviewInterface({ taskId, onNavigate }: ReviewInterfaceProps) {
         </div>
 
         <div className="flex items-center gap-3">
-          {currentUser.role === 'admin' && (
+          {currentUser?.role === 'admin' && (
             <AssignDropdown
               reviewers={reviewers}
-              value={task.assignedTo}
-              onChange={(userId) => assignTask(task.id, userId)}
+              value={task.assigned_to ?? undefined}
+              onChange={handleAssign}
+              disabled={assigning}
             />
           )}
 
-          {task.status === 'pending' && currentUser.role === 'reviewer' && (
+          {currentUser?.role === 'reviewer' && (
             <>
-              <Button variant="danger" onClick={() => setMode('edit')}>
+              <Button
+                variant="danger"
+                onClick={() => setMode('edit')}
+                disabled={saving}
+              >
                 <X className="h-4 w-4 mr-2" />
                 Suggest Changes
               </Button>
 
-              <Button variant="success" onClick={handleApprove}>
+              <Button
+                variant="success"
+                onClick={handleApprove}
+                disabled={saving}
+              >
                 <Check className="h-4 w-4 mr-2" />
                 Approve
               </Button>
@@ -214,10 +463,15 @@ export function ReviewInterface({ taskId, onNavigate }: ReviewInterfaceProps) {
         </div>
       </div>
 
+      {error && (
+        <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
       <AudioPlayer
         key={task.id}
-        src={task.audioUrl}
-        duration={task.duration}
+        src={audioUrls[task.id]}
         className="shadow-sm"
       />
 
@@ -229,8 +483,8 @@ export function ReviewInterface({ taskId, onNavigate }: ReviewInterfaceProps) {
             </h3>
           </div>
 
-          <div className="p-6 text-zinc-600 leading-relaxed text-lg">
-            {task.transcription}
+          <div className="p-6 text-zinc-600 leading-relaxed text-lg whitespace-pre-wrap">
+            {task.transcript_original}
           </div>
         </Card>
 
@@ -241,7 +495,7 @@ export function ReviewInterface({ taskId, onNavigate }: ReviewInterfaceProps) {
         >
           <div className="p-4 border-b border-zinc-100 bg-zinc-50/50 rounded-t-xl flex justify-between items-center">
             <h3 className="font-semibold text-zinc-900">
-              {task.status === 'changes_requested'
+              {status === 'changes_requested'
                 ? 'Suggested Changes'
                 : 'Reviewer Notes'}
             </h3>
@@ -273,7 +527,11 @@ export function ReviewInterface({ taskId, onNavigate }: ReviewInterfaceProps) {
                     Cancel
                   </Button>
 
-                  <Button size="sm" onClick={handleRequestChanges}>
+                  <Button
+                    size="sm"
+                    onClick={handleRequestChanges}
+                    isLoading={saving}
+                  >
                     <Save className="h-4 w-4 mr-2" />
                     Submit Changes
                   </Button>
@@ -281,25 +539,24 @@ export function ReviewInterface({ taskId, onNavigate }: ReviewInterfaceProps) {
               </>
             ) : (
               <div className="text-zinc-600 leading-relaxed text-lg">
-                {task.suggestedChanges ? (
-                  <div className="bg-amber-50 p-4 rounded-lg border border-amber-100 text-zinc-800">
-                    {task.suggestedChanges}
+                {latestSuggestion ? (
+                  <div className="bg-amber-50 p-4 rounded-lg border border-amber-100 text-zinc-800 whitespace-pre-wrap">
+                    {latestSuggestion}
                   </div>
                 ) : (
                   <div className="h-full flex flex-col items-center justify-center text-zinc-400 text-sm italic min-h-[200px]">
                     <p>No changes suggested yet.</p>
 
-                    {task.status === 'pending' &&
-                      currentUser.role === 'reviewer' && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="mt-4"
-                          onClick={() => setMode('edit')}
-                        >
-                          Start Editing
-                        </Button>
-                      )}
+                    {currentUser?.role === 'reviewer' && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mt-4"
+                        onClick={() => setMode('edit')}
+                      >
+                        Start Editing
+                      </Button>
+                    )}
                   </div>
                 )}
               </div>
@@ -315,10 +572,12 @@ function AssignDropdown({
   reviewers,
   value,
   onChange,
+  disabled,
 }: {
   reviewers: { id: string; name: string; email: string }[]
   value?: string
   onChange: (id: string | undefined) => void
+  disabled?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -340,6 +599,7 @@ function AssignDropdown({
         size="sm"
         onClick={() => setOpen(!open)}
         className="gap-2"
+        disabled={disabled}
       >
         <UserIcon className="h-3.5 w-3.5" />
         {selected ? `Assigned: ${selected.name}` : 'Assign Reviewer'}

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useState, useRef, useContext } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Card } from '@/app/components/ui/Card'
 import { Badge } from '@/app/components/ui/Badge'
 import { Button } from '@/app/components/ui/Button'
@@ -26,12 +26,27 @@ import {
 } from 'lucide-react'
 import { formatDate } from '@/app/lib/utils'
 import { Task, TaskStatus, User } from '@/app/types'
-import { AppContext } from '@/app/context'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/app/hooks'
+import { createClient } from '@supabase/supabase-js'
 
 type ViewMode = 'card' | 'list'
 type StatusFilter = 'all' | TaskStatus
+
+type AudioItemRow = {
+  id: string
+  title: string
+  transcript_original: string
+  created_at: string
+  assigned_to: string | null
+}
+
+type ReviewRow = {
+  id: string
+  audio_id: string
+  decision: 'approve' | 'suggest'
+  created_at: string
+}
 
 const FILTER_OPTIONS: {
   value: StatusFilter
@@ -65,8 +80,21 @@ const FILTER_OPTIONS: {
   },
 ]
 
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
+)
+
+function deriveTaskStatus(reviews: ReviewRow[]): TaskStatus {
+  if (!reviews.length) return 'pending'
+  if (reviews.some((r) => r.decision === 'suggest')) return 'changes_requested'
+  if (reviews.some((r) => r.decision === 'approve')) return 'approved'
+  return 'pending'
+}
+
 export function DashPage() {
   const router = useRouter()
+  const { user: currentUser } = useAuth()
 
   const onNavigate = (page: string, taskId?: string) => {
     if (page === 'review' && taskId) router.push(`/review/${taskId}`)
@@ -75,25 +103,112 @@ export function DashPage() {
     else router.push('/')
   }
 
-  const { tasks, bulkAssignTasks } = useContext(AppContext)
-  const { user: currentUser } = useAuth()
-  const invitedUsers: User[] = []
+  const [tasks, setTasks] = useState<Task[]>([])
+  const [reviewers, setReviewers] = useState<User[]>([])
+  const [loading, setLoading] = useState(true)
+  const [assigning, setAssigning] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const [viewMode, setViewMode] = useState<ViewMode>('card')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
   const isAdmin = currentUser?.role === 'admin'
-  const reviewers = invitedUsers.filter((u) => u.role === 'reviewer')
 
-  const visibleTasks = isAdmin
-    ? tasks
-    : tasks.filter((t) => t.assignedTo === currentUser?.id)
+  useEffect(() => {
+    let mounted = true
 
-  const filteredTasks =
-    statusFilter === 'all'
+    const loadDashboard = async () => {
+      setLoading(true)
+      setError(null)
+
+      try {
+        const [
+          { data: audioItems, error: audioError },
+          { data: reviews, error: reviewsError },
+        ] = await Promise.all([
+          supabase
+            .from('audio_items')
+            .select('id,title,transcript_original,created_at,assigned_to')
+            .order('created_at', { ascending: false }),
+          supabase
+            .from('reviews')
+            .select('id,audio_id,decision,created_at')
+            .order('created_at', { ascending: false }),
+        ])
+
+        if (audioError) throw audioError
+        if (reviewsError) throw reviewsError
+
+        const reviewsByAudioId = new Map<string, ReviewRow[]>()
+
+        for (const review of (reviews ?? []) as ReviewRow[]) {
+          const current = reviewsByAudioId.get(review.audio_id) ?? []
+          current.push(review)
+          reviewsByAudioId.set(review.audio_id, current)
+        }
+
+        const mappedTasks: Task[] = ((audioItems ?? []) as AudioItemRow[]).map(
+          (item) => {
+            const itemReviews = reviewsByAudioId.get(item.id) ?? []
+
+            return {
+              id: item.id,
+              title: item.title,
+              transcription: item.transcript_original,
+              status: deriveTaskStatus(itemReviews),
+              createdAt: new Date(item.created_at),
+              assignedTo: item.assigned_to ?? undefined,
+              duration: '--:--',
+              audioUrl: `https://${process.env.NEXT_PUBLIC_AWS_S3_BUCKET}.s3.${process.env.NEXT_PUBLIC_AWS_REGION}.amazonaws.com/${item.id}.mp3`,
+            }
+          }
+        )
+
+        let fetchedReviewers: User[] = []
+
+        if (currentUser?.role === 'admin') {
+          const reviewerRes = await fetch('/api/admin/reviewers')
+          const reviewerJson = await reviewerRes.json()
+
+          if (!reviewerRes.ok) {
+            throw new Error(reviewerJson.error || 'Failed to fetch reviewers')
+          }
+
+          fetchedReviewers = reviewerJson.reviewers ?? []
+        }
+
+        if (!mounted) return
+        setTasks(mappedTasks)
+        setReviewers(fetchedReviewers)
+      } catch (err) {
+        if (!mounted) return
+        setError(
+          err instanceof Error ? err.message : 'Failed to load dashboard'
+        )
+      } finally {
+        if (mounted) setLoading(false)
+      }
+    }
+
+    if (currentUser) {
+      loadDashboard()
+    }
+    return () => {
+      mounted = false
+    }
+  }, [currentUser])
+
+  const visibleTasks = useMemo(() => {
+    if (isAdmin) return tasks
+    return tasks.filter((t) => t.assignedTo === currentUser?.id)
+  }, [tasks, isAdmin, currentUser?.id])
+
+  const filteredTasks = useMemo(() => {
+    return statusFilter === 'all'
       ? visibleTasks
       : visibleTasks.filter((t) => t.status === statusFilter)
+  }, [visibleTasks, statusFilter])
 
   const pendingTasks = filteredTasks.filter((t) => t.status === 'pending')
   const completedTasks = filteredTasks.filter((t) => t.status !== 'pending')
@@ -101,7 +216,7 @@ export function DashPage() {
 
   const getAssigneeName = (userId?: string) => {
     if (!userId) return undefined
-    return invitedUsers.find((u) => u.id === userId)?.name
+    return reviewers.find((u) => u.id === userId)?.name ?? userId.slice(0, 8)
   }
 
   const toggleSelect = (taskId: string) => {
@@ -114,7 +229,9 @@ export function DashPage() {
   }
 
   const toggleSelectAll = (taskList: Task[]) => {
-    const allSelected = taskList.every((t) => selectedIds.has(t.id))
+    const allSelected =
+      taskList.length > 0 && taskList.every((t) => selectedIds.has(t.id))
+
     setSelectedIds((prev) => {
       const next = new Set(prev)
       if (allSelected) taskList.forEach((t) => next.delete(t.id))
@@ -123,12 +240,47 @@ export function DashPage() {
     })
   }
 
-  const handleBulkAssign = (userId: string | undefined) => {
-    bulkAssignTasks(Array.from(selectedIds), userId)
-    setSelectedIds(new Set())
+  const handleBulkAssign = async (userId: string | undefined) => {
+    if (!selectedIds.size) return
+
+    setAssigning(true)
+    setError(null)
+
+    try {
+      const res = await fetch('/api/admin/bulk-assign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          taskIds: Array.from(selectedIds),
+          assignedTo: userId ?? null,
+        }),
+      })
+
+      const json = await res.json()
+
+      if (!res.ok) {
+        throw new Error(json.error || 'Failed to assign tasks')
+      }
+
+      setTasks((prev) =>
+        prev.map((task) =>
+          selectedIds.has(task.id) ? { ...task, assignedTo: userId } : task
+        )
+      )
+
+      setSelectedIds(new Set())
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to assign tasks')
+    } finally {
+      setAssigning(false)
+    }
   }
 
   const clearSelection = () => setSelectedIds(new Set())
+
+  if (loading) {
+    return <div className="p-8 text-sm text-zinc-500">Loading tasks...</div>
+  }
 
   return (
     <div className="space-y-8 pb-24">
@@ -158,6 +310,12 @@ export function DashPage() {
           )}
         </div>
       </div>
+
+      {error && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
 
       {currentUser?.role === 'reviewer' && visibleTasks.length === 0 && (
         <div className="p-12 text-center bg-zinc-50 rounded-xl border border-dashed border-zinc-200">
@@ -235,6 +393,7 @@ export function DashPage() {
           reviewers={reviewers}
           onAssign={handleBulkAssign}
           onClear={clearSelection}
+          isLoading={assigning}
         />
       )}
     </div>
@@ -246,14 +405,17 @@ function BulkActionBar({
   reviewers,
   onAssign,
   onClear,
+  isLoading,
 }: {
   count: number
   reviewers: { id: string; name: string; email: string }[]
   onAssign: (userId: string | undefined) => void
   onClear: () => void
+  isLoading: boolean
 }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
@@ -261,6 +423,7 @@ function BulkActionBar({
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
+
   return (
     <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
       <div
@@ -282,6 +445,7 @@ function BulkActionBar({
             size="sm"
             onClick={() => setOpen(!open)}
             className="bg-zinc-800 text-white hover:bg-zinc-700 border-zinc-700 gap-2"
+            disabled={isLoading}
           >
             <Users className="h-3.5 w-3.5" />
             Assign to...
@@ -349,6 +513,7 @@ function StatusFilterDropdown({
 }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
@@ -356,11 +521,13 @@ function StatusFilterDropdown({
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
+
   const activeOption = FILTER_OPTIONS.find((o) => o.value === value)!
   const getCount = (status: StatusFilter) =>
     status === 'all'
       ? taskCounts.length
       : taskCounts.filter((t) => t.status === status).length
+
   return (
     <div className="relative" ref={ref}>
       <button
@@ -373,6 +540,7 @@ function StatusFilterDropdown({
           className={`h-3.5 w-3.5 transition-transform ${open ? 'rotate-180' : ''}`}
         />
       </button>
+
       {open && (
         <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl border border-zinc-200 shadow-lg py-1.5 z-50">
           {FILTER_OPTIONS.map((option) => {
@@ -402,6 +570,7 @@ function StatusFilterDropdown({
     </div>
   )
 }
+
 function TaskSection({
   title,
   icon,
@@ -431,16 +600,17 @@ function TaskSection({
   const allSelected =
     tasks.length > 0 && tasks.every((t) => selectedIds.has(t.id))
   const someSelected = tasks.some((t) => selectedIds.has(t.id))
-  // 2 rows max: card = 2 rows × 3 cols = 6, list = 6 rows
   const itemsPerPage = viewMode === 'card' ? 6 : 6
   const totalPages = Math.ceil(tasks.length / itemsPerPage)
   const pagedTasks = tasks.slice(page * itemsPerPage, (page + 1) * itemsPerPage)
-  // Reset page when tasks change or filter changes
+
   useEffect(() => {
     setPage(0)
   }, [tasks.length, viewMode])
+
   const canPrev = page > 0
   const canNext = page < totalPages - 1
+
   return (
     <section>
       <div className="flex items-center justify-between mb-4">
@@ -476,9 +646,7 @@ function TaskSection({
             </button>
 
             <div className="flex items-center gap-1">
-              {Array.from({
-                length: totalPages,
-              }).map((_, i) => (
+              {Array.from({ length: totalPages }).map((_, i) => (
                 <button
                   key={i}
                   onClick={() => setPage(i)}
@@ -539,6 +707,7 @@ function TaskSection({
     </section>
   )
 }
+
 function ViewToggle({
   viewMode,
   onChange,
@@ -565,6 +734,7 @@ function ViewToggle({
     </div>
   )
 }
+
 function TaskCard({
   task,
   onNavigate,
@@ -608,6 +778,7 @@ function TaskCard({
             {task.duration}
           </span>
         </div>
+
         <div onClick={() => onNavigate('review', task.id)}>
           <h3 className="font-semibold text-zinc-900 line-clamp-1 group-hover:text-blue-600 transition-colors">
             {task.title}
@@ -616,6 +787,7 @@ function TaskCard({
             {task.transcription}
           </p>
         </div>
+
         <div
           className="pt-4 border-t border-zinc-100 flex items-center justify-between text-xs text-zinc-500"
           onClick={() => onNavigate('review', task.id)}
@@ -647,6 +819,7 @@ function TaskCard({
     </Card>
   )
 }
+
 function TaskRow({
   task,
   onNavigate,
@@ -683,12 +856,14 @@ function TaskRow({
           )}
         </button>
       )}
+
       <div
         className="h-10 w-10 rounded-lg bg-zinc-100 flex items-center justify-center shrink-0 group-hover:bg-zinc-200 transition-colors cursor-pointer"
         onClick={() => onNavigate('review', task.id)}
       >
         <FileAudio className="h-5 w-5 text-zinc-500" />
       </div>
+
       <div
         className="flex-1 min-w-0 cursor-pointer"
         onClick={() => onNavigate('review', task.id)}
@@ -700,6 +875,7 @@ function TaskRow({
           {task.transcription}
         </p>
       </div>
+
       {showAssignee && (
         <div className="hidden md:flex items-center gap-1.5 shrink-0">
           {assigneeName ? (
@@ -716,14 +892,18 @@ function TaskRow({
           )}
         </div>
       )}
+
       <div className="hidden sm:flex items-center gap-1.5 text-xs text-zinc-500 shrink-0">
         <Calendar className="h-3.5 w-3.5" />
         {formatDate(task.createdAt)}
       </div>
+
       <span className="text-xs text-zinc-400 font-mono shrink-0">
         {task.duration}
       </span>
+
       <Badge status={task.status} className="shrink-0" />
+
       <ChevronRight
         className="h-4 w-4 text-zinc-300 group-hover:text-zinc-500 transition-colors shrink-0 cursor-pointer"
         onClick={() => onNavigate('review', task.id)}

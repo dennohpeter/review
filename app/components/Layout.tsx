@@ -1,7 +1,6 @@
 'use client'
 
 import React from 'react'
-import { useRouter } from 'next/navigation'
 import { Button } from '@/app/components/ui/Button'
 import { Headphones, LogOut } from 'lucide-react'
 import Image from 'next/image'
@@ -14,13 +13,9 @@ interface LayoutProps {
 }
 
 export function Layout({ children, onNavigate, currentPage }: LayoutProps) {
-  const router = useRouter()
   const { user: currentUser, logout } = useAuth()
 
-  const handleLogout = () => {
-    logout()
-    router.replace('/login')
-  }
+  const handleLogout = () => logout()
 
   return (
     <div className="min-h-screen bg-zinc-50 font-sans text-zinc-900">

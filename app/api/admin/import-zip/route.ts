@@ -1,20 +1,11 @@
+import { BUCKET, s3 } from '@/app/lib'
 import { createSupabaseServerClient } from '@/app/lib/supabase/server'
-import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
+import { PutObjectCommand } from '@aws-sdk/client-s3'
 import AdmZip from 'adm-zip'
 import { randomUUID } from 'crypto'
 import { NextResponse } from 'next/server'
 
 export const runtime = 'nodejs'
-
-const s3 = new S3Client({
-  region: process.env.NEXT_PUBLIC_AWS_REGION!,
-  credentials: {
-    accessKeyId: process.env.NEXT_PUBLIC_AWS_ACCESS_KEY_ID!,
-    secretAccessKey: process.env.NEXT_PUBLIC_AWS_SECRET_ACCESS_KEY!,
-  },
-})
-
-const BUCKET = process.env.NEXT_PUBLIC_AWS_S3_BUCKET!
 
 const AUDIO_EXTENSIONS = new Set([
   '.mp3',
