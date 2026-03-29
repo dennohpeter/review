@@ -18,9 +18,9 @@ import {
   User as UserIcon,
 } from 'lucide-react'
 import { useAuth } from '@/app/hooks'
-import { supabase } from '../lib/supabase/browser'
-import { ReviewRow, TaskStatus, AudioItemRow, Reviewer } from '../types'
-import { UserAvatar } from '../components/ui/UserAvatar'
+import { supabase } from '@/app/lib/supabase/browser'
+import { ReviewRow, TaskStatus, AudioItemRow, Reviewer } from '@/app/types'
+import { UserAvatar } from '@/app/components/ui/UserAvatar'
 
 interface ReviewInterfaceProps {
   taskId: string

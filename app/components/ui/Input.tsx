@@ -1,21 +1,21 @@
-import React, { useId } from 'react';
-import { cn } from '../../lib/utils';
+import React, { useId } from 'react'
+import { cn } from '@/app/lib/utils'
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
-  label?: string;
-  error?: string;
+  label?: string
+  error?: string
 }
 export function Input({ className, label, error, id, ...props }: InputProps) {
-  const inputId = id || useId();
+  const inputId = id || useId()
   return (
     <div className="space-y-2">
-      {label &&
-      <label
-        htmlFor={inputId}
-        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-zinc-700">
-
+      {label && (
+        <label
+          htmlFor={inputId}
+          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-zinc-700"
+        >
           {label}
         </label>
-      }
+      )}
       <input
         id={inputId}
         className={cn(
@@ -23,9 +23,10 @@ export function Input({ className, label, error, id, ...props }: InputProps) {
           error && 'border-red-500 focus-visible:ring-red-500',
           className
         )}
-        {...props} />
+        {...props}
+      />
 
       {error && <p className="text-xs text-red-500">{error}</p>}
-    </div>);
-
+    </div>
+  )
 }

@@ -1,5 +1,5 @@
 import { LoginPage } from '@/app/pages/LoginPage'
-import { createSupabaseServerClient } from '../lib/supabase/server'
+import { createSupabaseServerClient } from '@/app/lib/supabase/server'
 import { redirect } from 'next/navigation'
 
 export default async function Page() {

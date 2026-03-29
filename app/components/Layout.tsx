@@ -1,22 +1,51 @@
 'use client'
 
-import React from 'react'
+import React, { useMemo } from 'react'
 import { Button } from '@/app/components/ui/Button'
 import { Headphones, LogOut } from 'lucide-react'
-import Image from 'next/image'
-import { useAuth } from '../hooks/useAuth'
+import { useAuth } from '@/app/hooks/useAuth'
 import { UserAvatar } from './ui/UserAvatar'
+import { usePathname, useRouter } from 'next/navigation'
 
 interface LayoutProps {
   children: React.ReactNode
-  onNavigate: (page: string) => void
-  currentPage: string
 }
 
-export function Layout({ children, onNavigate, currentPage }: LayoutProps) {
+function pageKeyFromPath(path: string) {
+  if (path === '/') return 'dashboard'
+  if (path.startsWith('/upload')) return 'upload'
+  if (path.startsWith('/invite')) return 'invite'
+  if (path.startsWith('/review/')) return 'review'
+  return 'dashboard'
+}
+
+export function Layout({ children }: LayoutProps) {
+  const router = useRouter()
+  const pathname = usePathname()
   const { user: currentUser, logout } = useAuth()
 
+  const currentPage = useMemo(() => pageKeyFromPath(pathname), [pathname])
+
   const handleLogout = () => logout()
+
+  const onNavigate = (page: string, taskId?: string) => {
+    switch (page) {
+      case 'dashboard':
+        router.push('/')
+        break
+      case 'upload':
+        router.push('/upload')
+        break
+      case 'invite':
+        router.push('/invite')
+        break
+      case 'review':
+        router.push(taskId ? `/review/${taskId}` : '/')
+        break
+      default:
+        router.push('/')
+    }
+  }
 
   return (
     <div className="min-h-screen bg-zinc-50 font-sans text-zinc-900">

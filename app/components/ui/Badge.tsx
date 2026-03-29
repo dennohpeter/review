@@ -1,9 +1,9 @@
-import React from 'react';
-import { cn } from '../../lib/utils';
-import { TaskStatus } from '../../types';
+import React from 'react'
+import { cn } from '@/app/lib/utils'
+import { TaskStatus } from '@/app/types'
 interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
-  status?: TaskStatus;
-  variant?: 'default' | 'outline';
+  status?: TaskStatus
+  variant?: 'default' | 'outline'
 }
 export function Badge({
   className,
@@ -15,9 +15,9 @@ export function Badge({
   const statusStyles = {
     pending: 'bg-amber-100 text-amber-700 border-amber-200',
     approved: 'bg-emerald-100 text-emerald-700 border-emerald-200',
-    changes_requested: 'bg-red-100 text-red-700 border-red-200'
-  };
-  const defaultStyles = 'bg-zinc-100 text-zinc-900 border-zinc-200';
+    changes_requested: 'bg-red-100 text-red-700 border-red-200',
+  }
+  const defaultStyles = 'bg-zinc-100 text-zinc-900 border-zinc-200'
   return (
     <span
       className={cn(
@@ -25,9 +25,9 @@ export function Badge({
         status ? statusStyles[status] : defaultStyles,
         className
       )}
-      {...props}>
-
+      {...props}
+    >
       {status ? status.replace('_', ' ') : children}
-    </span>);
-
+    </span>
+  )
 }

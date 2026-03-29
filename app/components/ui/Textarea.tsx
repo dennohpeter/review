@@ -1,9 +1,8 @@
-import React, { useId } from 'react';
-import { cn } from '../../lib/utils';
-interface TextareaProps extends
-  React.TextareaHTMLAttributes<HTMLTextAreaElement> {
-  label?: string;
-  error?: string;
+import React, { useId } from 'react'
+import { cn } from '@/app/lib/utils'
+interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
+  label?: string
+  error?: string
 }
 export function Textarea({
   className,
@@ -12,17 +11,17 @@ export function Textarea({
   id,
   ...props
 }: TextareaProps) {
-  const inputId = id || useId();
+  const inputId = id || useId()
   return (
     <div className="space-y-2">
-      {label &&
-      <label
-        htmlFor={inputId}
-        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-zinc-700">
-
+      {label && (
+        <label
+          htmlFor={inputId}
+          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-zinc-700"
+        >
           {label}
         </label>
-      }
+      )}
       <textarea
         id={inputId}
         className={cn(
@@ -30,9 +29,10 @@ export function Textarea({
           error && 'border-red-500 focus-visible:ring-red-500',
           className
         )}
-        {...props} />
+        {...props}
+      />
 
       {error && <p className="text-xs text-red-500">{error}</p>}
-    </div>);
-
+    </div>
+  )
 }

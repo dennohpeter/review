@@ -1,5 +1,5 @@
-import React from 'react';
-import { cn } from '../../lib/utils';
+import React from 'react'
+import { cn } from '@/app/lib/utils'
 export function Card({
   className,
   children,
@@ -11,11 +11,11 @@ export function Card({
         'rounded-xl border border-zinc-200 bg-white text-zinc-950 shadow-sm',
         className
       )}
-      {...props}>
-
+      {...props}
+    >
       {children}
-    </div>);
-
+    </div>
+  )
 }
 export function CardHeader({
   className,
@@ -25,8 +25,8 @@ export function CardHeader({
   return (
     <div className={cn('flex flex-col space-y-1.5 p-6', className)} {...props}>
       {children}
-    </div>);
-
+    </div>
+  )
 }
 export function CardTitle({
   className,
@@ -36,11 +36,11 @@ export function CardTitle({
   return (
     <h3
       className={cn('font-semibold leading-none tracking-tight', className)}
-      {...props}>
-
+      {...props}
+    >
       {children}
-    </h3>);
-
+    </h3>
+  )
 }
 export function CardContent({
   className,
@@ -50,8 +50,8 @@ export function CardContent({
   return (
     <div className={cn('p-6 pt-0', className)} {...props}>
       {children}
-    </div>);
-
+    </div>
+  )
 }
 export function CardFooter({
   className,
@@ -61,6 +61,6 @@ export function CardFooter({
   return (
     <div className={cn('flex items-center p-6 pt-0', className)} {...props}>
       {children}
-    </div>);
-
+    </div>
+  )
 }

@@ -36,8 +36,8 @@ import {
 } from '@/app/types'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/app/hooks'
-import { supabase } from '../lib/supabase/browser'
-import { UserAvatar } from '../components/ui/UserAvatar'
+import { supabase } from '@/app/lib/supabase/browser'
+import { UserAvatar } from '@/app/components/ui/UserAvatar'
 
 const FILTER_OPTIONS: {
   value: StatusFilter

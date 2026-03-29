@@ -17,7 +17,7 @@ import {
   AlertCircle,
 } from 'lucide-react'
 import { useAuth } from '@/app/hooks'
-import { ImportSummary } from '../types'
+import { ImportSummary } from '@/app/types'
 
 interface AdminUploadProps {
   onNavigate: (page: string) => void

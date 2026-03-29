@@ -1,11 +1,11 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { User, UserRole } from '../types'
+import { User, UserRole } from '@/app/types'
 import { AuthContext, AuthContextType } from './AuthContext'
-import { supabase } from '../lib/supabase/browser'
+import { supabase } from '@/app/lib/supabase/browser'
 import { useRouter } from 'next/navigation'
-import { getDicebearAvatar } from '../lib/dicebear'
+import { getDicebearAvatar } from '@/app/lib/dicebear'
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)

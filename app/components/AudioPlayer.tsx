@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Play, Pause, Volume2 } from 'lucide-react'
 import { Button } from './ui/Button'
-import { cn } from '../lib/utils'
+import { cn } from '@/app/lib/utils'
 
 interface AudioPlayerProps {
   src?: string
