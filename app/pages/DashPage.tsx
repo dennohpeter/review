@@ -37,6 +37,7 @@ import {
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/app/hooks'
 import { supabase } from '../lib/supabase/browser'
+import { UserAvatar } from '../components/ui/UserAvatar'
 
 const FILTER_OPTIONS: {
   value: StatusFilter
@@ -467,13 +468,12 @@ function BulkActionBar({
                   }}
                   className="w-full flex items-center gap-2 px-3 py-2.5 text-sm hover:bg-zinc-50 transition-colors text-zinc-600"
                 >
-                  <div className="h-6 w-6 rounded-full bg-zinc-200 flex items-center justify-center text-xs font-medium text-zinc-600">
-                    {r.name.charAt(0)}
-                  </div>
-                  <span>{r.name}</span>
-                  <span className="text-zinc-400 text-xs ml-auto">
-                    {r.email}
-                  </span>
+                  <UserAvatar id={r.id} name={r.name} size={24} />
+                  {r.name ? (
+                    <span>{r.name}</span>
+                  ) : (
+                    <span className="text-zinc-400 text-xs">{r.email}</span>
+                  )}
                 </button>
               ))}
             </div>
@@ -690,6 +690,7 @@ function TaskSection({
               assigneeName={
                 showAssignee ? getAssigneeName(task.assignedTo) : undefined
               }
+              assigneeId={task.assignedTo || ''}
               showAssignee={showAssignee}
               isSelected={selectedIds.has(task.id)}
               onToggleSelect={onToggleSelect}
@@ -732,6 +733,7 @@ function TaskCard({
   task,
   onNavigate,
   assigneeName,
+  assigneeId,
   showAssignee,
   isSelected,
   onToggleSelect,
@@ -739,6 +741,8 @@ function TaskCard({
   task: Task
   onNavigate: (page: string, taskId?: string) => void
   assigneeName?: string
+  assigneeId?: string
+
   showAssignee: boolean
   isSelected: boolean
   onToggleSelect?: (id: string) => void
@@ -792,7 +796,11 @@ function TaskCard({
             </div>
             {showAssignee && (
               <div className="flex items-center gap-1.5">
-                <UserIcon className="h-3.5 w-3.5" />
+                <UserAvatar
+                  id={assigneeId || ''}
+                  name={assigneeName || ''}
+                  size={16}
+                />
                 {assigneeName ? (
                   <span className="text-zinc-700 font-medium">
                     {assigneeName}
@@ -818,6 +826,7 @@ function TaskRow({
   onNavigate,
   isLast,
   assigneeName,
+  assigneeId,
   showAssignee,
   isSelected,
   onToggleSelect,
@@ -826,6 +835,7 @@ function TaskRow({
   onNavigate: (page: string, taskId?: string) => void
   isLast: boolean
   assigneeName?: string
+  assigneeId: string
   showAssignee: boolean
   isSelected: boolean
   onToggleSelect?: (id: string) => void
@@ -872,16 +882,14 @@ function TaskRow({
       {showAssignee && (
         <div className="hidden md:flex items-center gap-1.5 shrink-0">
           {assigneeName ? (
-            <span className="inline-flex items-center gap-1.5 text-xs bg-zinc-100 text-zinc-700 px-2 py-1 rounded-full font-medium">
-              <span className="h-4 w-4 rounded-full bg-zinc-300 flex items-center justify-center text-[10px] text-zinc-600 font-bold">
-                {assigneeName.charAt(0)}
-              </span>
+            <div className="inline-flex items-center gap-1.5 text-xs bg-zinc-100 text-zinc-700 px-2 py-1 rounded-full font-medium">
+              <UserAvatar id={assigneeId} name={assigneeName} size={16} />
               {assigneeName}
-            </span>
+            </div>
           ) : (
-            <span className="text-xs text-amber-600 font-medium bg-amber-50 px-2 py-1 rounded-full border border-amber-100">
+            <div className="text-xs text-amber-600 font-medium bg-amber-50 px-2 py-1 rounded-full border border-amber-100">
               Unassigned
-            </span>
+            </div>
           )}
         </div>
       )}

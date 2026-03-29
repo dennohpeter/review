@@ -20,6 +20,7 @@ import {
 import { useAuth } from '@/app/hooks'
 import { supabase } from '../lib/supabase/browser'
 import { ReviewRow, TaskStatus, AudioItemRow, Reviewer } from '../types'
+import { UserAvatar } from '../components/ui/UserAvatar'
 
 interface ReviewInterfaceProps {
   taskId: string
@@ -386,8 +387,12 @@ export function ReviewInterface({ taskId, onNavigate }: ReviewInterfaceProps) {
               {new Date(task.created_at).toLocaleDateString()}
             </span>
 
-            <span className="flex items-center gap-1.5">
-              <UserIcon className="h-3.5 w-3.5" />
+            <div className="flex items-center gap-1.5">
+              <UserAvatar
+                id={task.assigned_to || ''}
+                name={assigneeName || 'Unassigned'}
+                size={16}
+              />
               {assigneeName ? (
                 <span className="text-zinc-700 font-medium">
                   {assigneeName}
@@ -395,7 +400,7 @@ export function ReviewInterface({ taskId, onNavigate }: ReviewInterfaceProps) {
               ) : (
                 <span className="text-amber-600 font-medium">Unassigned</span>
               )}
-            </span>
+            </div>
           </div>
         </div>
 
@@ -608,11 +613,12 @@ function AssignDropdown({
                   : 'text-zinc-600'
               }`}
             >
-              <div className="h-6 w-6 rounded-full bg-zinc-200 flex items-center justify-center text-xs font-medium text-zinc-600">
-                {r.name.charAt(0)}
-              </div>
-              <span>{r.name}</span>
-              <span className="text-zinc-400 text-xs ml-auto">{r.email}</span>
+              <UserAvatar id={r.id} name={r.name} size={24} />
+              {r.name ? (
+                <span>{r.name}</span>
+              ) : (
+                <span className="text-zinc-400 text-xs">{r.email}</span>
+              )}
             </button>
           ))}
         </div>
