@@ -5,6 +5,7 @@ import { Card } from '@/app/components/ui/Card'
 import { Button } from '@/app/components/ui/Button'
 import { Textarea } from '@/app/components/ui/Textarea'
 import { Badge } from '@/app/components/ui/Badge'
+import { ConfirmModal } from '@/app/components/ui/ConfirmModal'
 import { AudioPlayer } from '@/app/components/AudioPlayer'
 import {
   Check,
@@ -52,6 +53,10 @@ export function ReviewInterface({ taskId, onNavigate }: ReviewInterfaceProps) {
 
   const [suggestion, setSuggestion] = useState('')
   const [mode, setMode] = useState<'view' | 'edit'>('view')
+  const [pendingAssignment, setPendingAssignment] = useState<{
+    userId?: string
+    reviewerName: string
+  } | null>(null)
 
   const touchStartX = useRef<number | null>(null)
   const touchEndX = useRef<number | null>(null)
@@ -97,11 +102,11 @@ export function ReviewInterface({ taskId, onNavigate }: ReviewInterfaceProps) {
 
         let reviewerRows: Reviewer[] = []
         if (currentUser.role === 'admin') {
-          const reviewerRes = await fetch('/api/admin/reviewers')
+          const reviewerRes = await fetch('/api/admin/users')
           const reviewerJson = await reviewerRes.json()
 
           if (reviewerRes.ok) {
-            reviewerRows = reviewerJson.reviewers ?? []
+            reviewerRows = reviewerJson.users ?? []
           }
         }
 
@@ -298,8 +303,19 @@ export function ReviewInterface({ taskId, onNavigate }: ReviewInterfaceProps) {
     }
   }
 
-  const handleAssign = async (userId: string | undefined) => {
-    if (!task) return
+  const requestAssign = (userId: string | undefined) => {
+    const reviewerName = userId
+      ? (reviewers.find((u) => u.id === userId)?.name ?? 'selected reviewer')
+      : 'Unassigned'
+
+    setPendingAssignment({
+      userId,
+      reviewerName,
+    })
+  }
+
+  const confirmAssign = async () => {
+    if (!task || !pendingAssignment) return
 
     setAssigning(true)
     setError(null)
@@ -310,7 +326,7 @@ export function ReviewInterface({ taskId, onNavigate }: ReviewInterfaceProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           taskIds: [task.id],
-          assignedTo: userId ?? null,
+          assignedTo: pendingAssignment.userId ?? null,
         }),
       })
 
@@ -319,9 +335,13 @@ export function ReviewInterface({ taskId, onNavigate }: ReviewInterfaceProps) {
 
       setTasks((prev) =>
         prev.map((t) =>
-          t.id === task.id ? { ...t, assigned_to: userId ?? null } : t
+          t.id === task.id
+            ? { ...t, assigned_to: pendingAssignment.userId ?? null }
+            : t
         )
       )
+
+      setPendingAssignment(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to assign reviewer')
     } finally {
@@ -442,7 +462,7 @@ export function ReviewInterface({ taskId, onNavigate }: ReviewInterfaceProps) {
             <AssignDropdown
               reviewers={reviewers}
               value={task?.assigned_to ?? undefined}
-              onChange={handleAssign}
+              onChange={requestAssign}
               disabled={assigning}
             />
           )}
@@ -582,6 +602,39 @@ export function ReviewInterface({ taskId, onNavigate }: ReviewInterfaceProps) {
           </div>
         </Card>
       </div>
+
+      <ConfirmModal
+        open={!!pendingAssignment}
+        title={
+          pendingAssignment?.userId
+            ? 'Assign this task?'
+            : 'Unassign this task?'
+        }
+        description={
+          pendingAssignment?.userId
+            ? `This will assign "${task?.title ?? 'this task'}" to ${pendingAssignment.reviewerName}.`
+            : `This will remove the reviewer assignment from "${task?.title ?? 'this task'}".`
+        }
+        confirmText={
+          pendingAssignment?.userId ? 'Confirm Assignment' : 'Confirm Unassign'
+        }
+        cancelText="Cancel"
+        loading={assigning}
+        onCancel={() => setPendingAssignment(null)}
+        onConfirm={confirmAssign}
+      >
+        <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
+          <div className="text-sm text-zinc-600">
+            {pendingAssignment?.userId ? 'Reviewer' : 'Action'}
+          </div>
+          <div className="mt-1 font-medium text-zinc-900">
+            {pendingAssignment?.reviewerName}
+          </div>
+          <div className="mt-3 text-sm text-zinc-600">
+            Task: {task?.title ?? 'Current task'}
+          </div>
+        </div>
+      </ConfirmModal>
     </div>
   )
 }

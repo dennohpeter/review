@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Card } from '@/app/components/ui/Card'
 import { Badge } from '@/app/components/ui/Badge'
 import { Button } from '@/app/components/ui/Button'
+import { ConfirmModal } from '@/app/components/ui/ConfirmModal'
 import {
   PlayCircle,
   Calendar,
@@ -98,6 +99,10 @@ export function DashPage() {
   const [viewMode, setViewMode] = useState<ViewMode>('card')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [pendingAssignment, setPendingAssignment] = useState<{
+    userId?: string
+    reviewerName: string
+  } | null>(null)
 
   const isAdmin = currentUser?.role === 'admin'
 
@@ -192,6 +197,7 @@ export function DashPage() {
 
   const visibleTasks = useMemo(() => {
     if (isAdmin) return tasks
+
     return tasks.filter((t) => t.assignedTo === currentUser?.id)
   }, [tasks, isAdmin, currentUser?.id])
 
@@ -231,8 +237,19 @@ export function DashPage() {
     })
   }
 
-  const handleBulkAssign = async (userId: string | undefined) => {
-    if (!selectedIds.size) return
+  const requestBulkAssign = (userId: string | undefined) => {
+    const reviewerName = userId
+      ? (reviewers.find((u) => u.id === userId)?.name ?? 'selected user')
+      : 'Unassigned'
+
+    setPendingAssignment({
+      userId,
+      reviewerName,
+    })
+  }
+
+  const confirmBulkAssign = async () => {
+    if (!pendingAssignment || !selectedIds.size) return
 
     setAssigning(true)
     setError(null)
@@ -243,7 +260,7 @@ export function DashPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           taskIds: Array.from(selectedIds),
-          assignedTo: userId ?? null,
+          assignedTo: pendingAssignment.userId ?? null,
         }),
       })
 
@@ -255,11 +272,14 @@ export function DashPage() {
 
       setTasks((prev) =>
         prev.map((task) =>
-          selectedIds.has(task.id) ? { ...task, assignedTo: userId } : task
+          selectedIds.has(task.id)
+            ? { ...task, assignedTo: pendingAssignment.userId }
+            : task
         )
       )
 
       setSelectedIds(new Set())
+      setPendingAssignment(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to assign tasks')
     } finally {
@@ -385,11 +405,48 @@ export function DashPage() {
         <BulkActionBar
           count={selectedIds.size}
           reviewers={reviewers}
-          onAssign={handleBulkAssign}
+          onAssign={requestBulkAssign}
           onClear={clearSelection}
           isLoading={assigning}
         />
       )}
+
+      <ConfirmModal
+        open={!!pendingAssignment}
+        title={
+          pendingAssignment?.userId
+            ? 'Assign selected tasks?'
+            : 'Unassign selected tasks?'
+        }
+        description={
+          pendingAssignment?.userId
+            ? `This will assign ${selectedIds.size} selected task${
+                selectedIds.size === 1 ? '' : 's'
+              } to ${pendingAssignment.reviewerName}.`
+            : `This will remove the reviewer assignment from ${selectedIds.size} selected task${
+                selectedIds.size === 1 ? '' : 's'
+              }.`
+        }
+        confirmText={
+          pendingAssignment?.userId ? 'Confirm Assignment' : 'Confirm Unassign'
+        }
+        cancelText="Cancel"
+        loading={assigning}
+        onCancel={() => setPendingAssignment(null)}
+        onConfirm={confirmBulkAssign}
+      >
+        <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
+          <div className="text-sm text-zinc-600">
+            {pendingAssignment?.userId ? 'Reviewer' : 'Action'}
+          </div>
+          <div className="mt-1 font-medium text-zinc-900">
+            {pendingAssignment?.reviewerName}
+          </div>
+          <div className="mt-3 text-sm text-zinc-600">
+            {selectedIds.size} task{selectedIds.size === 1 ? '' : 's'} selected
+          </div>
+        </div>
+      </ConfirmModal>
     </div>
   )
 }
@@ -444,7 +501,9 @@ function BulkActionBar({
             <Users className="h-3.5 w-3.5" />
             Assign to...
             <ChevronDown
-              className={`h-3.5 w-3.5 transition-transform ${open ? 'rotate-180' : ''}`}
+              className={`h-3.5 w-3.5 transition-transform ${
+                open ? 'rotate-180' : ''
+              }`}
             />
           </Button>
 
@@ -462,6 +521,7 @@ function BulkActionBar({
                 </div>
                 Unassign All
               </button>
+
               {reviewers.map((r) => (
                 <button
                   key={r.id}
@@ -525,12 +585,18 @@ function StatusFilterDropdown({
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen(!open)}
-        className={`inline-flex items-center gap-2 h-10 px-3 rounded-lg border text-sm font-medium transition-all ${value !== 'all' ? 'border-zinc-900 bg-zinc-900 text-white' : 'border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50'}`}
+        className={`inline-flex items-center gap-2 h-10 px-3 rounded-lg border text-sm font-medium transition-all ${
+          value !== 'all'
+            ? 'border-zinc-900 bg-zinc-900 text-white'
+            : 'border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50'
+        }`}
       >
         <Filter className="h-3.5 w-3.5" />
         <span>{activeOption.label}</span>
         <ChevronDown
-          className={`h-3.5 w-3.5 transition-transform ${open ? 'rotate-180' : ''}`}
+          className={`h-3.5 w-3.5 transition-transform ${
+            open ? 'rotate-180' : ''
+          }`}
         />
       </button>
 
@@ -539,6 +605,7 @@ function StatusFilterDropdown({
           {FILTER_OPTIONS.map((option) => {
             const count = getCount(option.value)
             const isActive = value === option.value
+
             return (
               <button
                 key={option.value}
@@ -546,12 +613,20 @@ function StatusFilterDropdown({
                   onChange(option.value)
                   setOpen(false)
                 }}
-                className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${isActive ? 'bg-zinc-50 text-zinc-900 font-medium' : 'text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900'}`}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${
+                  isActive
+                    ? 'bg-zinc-50 text-zinc-900 font-medium'
+                    : 'text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900'
+                }`}
               >
                 <span className={option.color}>{option.icon}</span>
                 <span className="flex-1 text-left">{option.label}</span>
                 <span
-                  className={`text-xs font-mono px-1.5 py-0.5 rounded-md ${isActive ? 'bg-zinc-200 text-zinc-700' : 'bg-zinc-100 text-zinc-500'}`}
+                  className={`text-xs font-mono px-1.5 py-0.5 rounded-md ${
+                    isActive
+                      ? 'bg-zinc-200 text-zinc-700'
+                      : 'bg-zinc-100 text-zinc-500'
+                  }`}
                 >
                   {count}
                 </span>
@@ -595,9 +670,8 @@ function TaskSection({
     tasks.length > 0 && tasks.every((t) => selectedIds.has(t.id))
   const someSelected = tasks.some((t) => selectedIds.has(t.id))
 
-  const itemsPerPage = viewMode === 'card' ? 6 : 6
+  const itemsPerPage = 6
   const totalPages = Math.max(1, Math.ceil(tasks.length / itemsPerPage))
-
   const safePage = Math.min(page, totalPages - 1)
   const pagedTasks = tasks.slice(
     safePage * itemsPerPage,
@@ -646,7 +720,11 @@ function TaskSection({
                 <button
                   key={i}
                   onClick={() => setPage(i)}
-                  className={`h-2 rounded-full transition-all ${i === safePage ? 'w-6 bg-zinc-900' : 'w-2 bg-zinc-300 hover:bg-zinc-400'}`}
+                  className={`h-2 rounded-full transition-all ${
+                    i === safePage
+                      ? 'w-6 bg-zinc-900'
+                      : 'w-2 bg-zinc-300 hover:bg-zinc-400'
+                  }`}
                 />
               ))}
             </div>
@@ -676,6 +754,7 @@ function TaskSection({
               assigneeName={
                 showAssignee ? getAssigneeName(task.assignedTo) : undefined
               }
+              assigneeId={task.assignedTo || ''}
               showAssignee={showAssignee}
               isSelected={selectedIds.has(task.id)}
               onToggleSelect={onToggleSelect}
@@ -716,14 +795,22 @@ function ViewToggle({
     <div className="flex items-center bg-zinc-100 rounded-lg p-1 gap-0.5">
       <button
         onClick={() => onChange('card')}
-        className={`p-2 rounded-md transition-all ${viewMode === 'card' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}
+        className={`p-2 rounded-md transition-all ${
+          viewMode === 'card'
+            ? 'bg-white text-zinc-900 shadow-sm'
+            : 'text-zinc-500 hover:text-zinc-700'
+        }`}
         title="Card view"
       >
         <LayoutGrid className="h-4 w-4" />
       </button>
       <button
         onClick={() => onChange('list')}
-        className={`p-2 rounded-md transition-all ${viewMode === 'list' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}
+        className={`p-2 rounded-md transition-all ${
+          viewMode === 'list'
+            ? 'bg-white text-zinc-900 shadow-sm'
+            : 'text-zinc-500 hover:text-zinc-700'
+        }`}
         title="List view"
       >
         <List className="h-4 w-4" />
@@ -745,14 +832,17 @@ function TaskCard({
   onNavigate: (page: string, taskId?: string) => void
   assigneeName?: string
   assigneeId?: string
-
   showAssignee: boolean
   isSelected: boolean
   onToggleSelect?: (id: string) => void
 }) {
   return (
     <Card
-      className={`transition-all cursor-pointer group ${isSelected ? 'ring-2 ring-zinc-900 ring-offset-1 shadow-md' : 'hover:shadow-md'}`}
+      className={`transition-all cursor-pointer group ${
+        isSelected
+          ? 'ring-2 ring-zinc-900 ring-offset-1 shadow-md'
+          : 'hover:shadow-md'
+      }`}
     >
       <div className="p-6 space-y-4">
         <div className="flex justify-between items-start">
@@ -774,6 +864,7 @@ function TaskCard({
             )}
             <Badge status={task.status}>{task.status}</Badge>
           </div>
+
           <span className="text-xs text-zinc-400 font-mono">
             {task.duration}
           </span>
@@ -797,6 +888,7 @@ function TaskCard({
               <Calendar className="h-3.5 w-3.5" />
               {formatDate(task.createdAt)}
             </div>
+
             {showAssignee && (
               <div className="flex items-center gap-1.5">
                 <UserAvatar
@@ -814,6 +906,7 @@ function TaskCard({
               </div>
             )}
           </div>
+
           <div className="flex items-center gap-1.5 text-zinc-900 font-medium">
             <PlayCircle className="h-4 w-4" />
             Review
@@ -845,7 +938,9 @@ function TaskRow({
 }) {
   return (
     <div
-      className={`flex items-center gap-4 px-5 py-4 transition-colors group ${!isLast ? 'border-b border-zinc-100' : ''} ${isSelected ? 'bg-zinc-100' : 'hover:bg-zinc-50'}`}
+      className={`flex items-center gap-4 px-5 py-4 transition-colors group ${
+        !isLast ? 'border-b border-zinc-100' : ''
+      } ${isSelected ? 'bg-zinc-100' : 'hover:bg-zinc-50'}`}
     >
       {onToggleSelect && (
         <button
