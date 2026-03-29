@@ -5,6 +5,7 @@ import { Button } from '@/app/components/ui/Button'
 import { Headphones, LogOut } from 'lucide-react'
 import Image from 'next/image'
 import { useAuth } from '../hooks/useAuth'
+import { UserAvatar } from './ui/UserAvatar'
 
 interface LayoutProps {
   children: React.ReactNode
@@ -78,22 +79,10 @@ export function Layout({ children, onNavigate, currentPage }: LayoutProps) {
               </div>
 
               <div className="h-9 w-9 rounded-full bg-zinc-200 overflow-hidden ring-2 ring-white">
-                {/* <img
-                  src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(
-                    currentUser?.name || ''
-                  )}`}
-                  alt={currentUser?.name}
-                  className="h-full w-full object-cover"
-                /> */}
-                <Image
-                  src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(
-                    currentUser?.name || ''
-                  )}`}
-                  alt={currentUser?.name || 'User avatar'}
-                  width={36}
-                  height={36}
-                  className="object-cover"
-                  unoptimized
+                <UserAvatar
+                  id={currentUser?.id || ''}
+                  name={currentUser?.name || ''}
+                  size={36}
                 />
               </div>
 

@@ -17,20 +17,10 @@ import {
   AlertCircle,
 } from 'lucide-react'
 import { useAuth } from '@/app/hooks'
+import { ImportSummary } from '../types'
 
 interface AdminUploadProps {
   onNavigate: (page: string) => void
-}
-
-type ImportSummary = {
-  ok: boolean
-  importBatchId: string
-  importedCount: number
-  skippedCount: number
-  errorCount: number
-  imported: Array<{ id: string; title: string; audio_key: string }>
-  skipped: Array<{ file: string; reason: string }>
-  errors: Array<{ file: string; reason: string }>
 }
 
 export function AdminUpload({ onNavigate }: AdminUploadProps) {

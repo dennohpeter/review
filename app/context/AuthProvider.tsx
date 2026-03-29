@@ -5,6 +5,7 @@ import { User, UserRole } from '../types'
 import { AuthContext, AuthContextType } from './AuthContext'
 import { supabase } from '../lib/supabase/browser'
 import { useRouter } from 'next/navigation'
+import { getDicebearAvatar } from '../lib/dicebear'
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
@@ -113,7 +114,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         const { data: profile } = await supabase
           .from('profiles')
-          .select('role')
+          .select('role,name')
           .eq('user_id', sessionUser.id)
           .single()
 
@@ -123,11 +124,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           id: sessionUser.id,
           name:
             (sessionUser.user_metadata?.name as string | undefined) ??
+            profile?.name ??
             sessionUser.email ??
             'User',
           email: sessionUser.email ?? '',
           role: (profile?.role as UserRole | undefined) ?? 'reviewer',
-          avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${sessionUser.id}`,
+          avatar: getDicebearAvatar({ seed: sessionUser.id }),
         })
       } else {
         setUser(null)
@@ -145,7 +147,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
           const { data: profile } = await supabase
             .from('profiles')
-            .select('role')
+            .select('role,name')
             .eq('user_id', sessionUser.id)
             .single()
 
@@ -153,11 +155,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             id: sessionUser.id,
             name:
               (sessionUser.user_metadata?.name as string | undefined) ??
+              profile?.name ??
               sessionUser.email ??
               'User',
             email: sessionUser.email ?? '',
             role: (profile?.role as UserRole | undefined) ?? 'reviewer',
-            avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${sessionUser.id}`,
+            avatar: getDicebearAvatar({ seed: sessionUser.id }),
           })
         } else {
           setUser(null)

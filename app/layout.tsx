@@ -10,7 +10,7 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'AudioScribe',
+  title: 'AudioScribe | Low German Audio Transcription Review',
   description: 'Audio transcription review portal',
 }
 

@@ -1,8 +1,9 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { Button } from '@/app/components/ui/Button'
 import { Input } from '@/app/components/ui/Input'
+import { ConfirmModal } from '@/app/components/ui/ConfirmModal'
 import {
   Card,
   CardHeader,
@@ -10,20 +11,13 @@ import {
   CardContent,
 } from '@/app/components/ui/Card'
 import { Badge } from '@/app/components/ui/Badge'
-import { UserRole } from '@/app/types'
-import { Mail, Plus, ArrowLeft, Users, Shield } from 'lucide-react'
-import { useAuth } from '../hooks'
+import { ReviewerUser, UserRole } from '@/app/types'
+import { Mail, Plus, ArrowLeft, Users, Shield, Trash2 } from 'lucide-react'
+import { useAuth } from '@/app/hooks'
+import { UserAvatar } from '@/app/components/ui/UserAvatar'
 
 interface InviteUserProps {
   onNavigate: (page: string) => void
-}
-
-type ReviewerUser = {
-  id: string
-  name: string
-  email: string
-  role: 'reviewer' | 'admin'
-  avatar?: string
 }
 
 export function InviteUser({ onNavigate }: InviteUserProps) {
@@ -36,23 +30,62 @@ export function InviteUser({ onNavigate }: InviteUserProps) {
   const [users, setUsers] = useState<ReviewerUser[]>([])
   const [loadingUsers, setLoadingUsers] = useState(true)
   const [submitting, setSubmitting] = useState(false)
+  const [deletingUserId, setDeletingUserId] = useState<string | null>(null)
+  const [userToDelete, setUserToDelete] = useState<ReviewerUser | null>(null)
 
   const [successMsg, setSuccessMsg] = useState('')
   const [errorMsg, setErrorMsg] = useState('')
 
-  const loadUsers = async () => {
+  const openDeleteModal = (target: ReviewerUser) => {
+    if (target.id === user?.id) return
+    setUserToDelete(target)
+  }
+
+  const confirmDeleteUser = async () => {
+    if (!userToDelete) return
+
+    setDeletingUserId(userToDelete.id)
+    setErrorMsg('')
+    setSuccessMsg('')
+
+    try {
+      const res = await fetch('/api/admin/delete-user', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: userToDelete.id,
+        }),
+      })
+
+      const json = await res.json()
+
+      if (!res.ok) {
+        throw new Error(json.error || 'Failed to delete user')
+      }
+
+      setUsers((prev) => prev.filter((u) => u.id !== userToDelete.id))
+      setSuccessMsg(`Deleted ${userToDelete.email}`)
+      setTimeout(() => setSuccessMsg(''), 3000)
+      setUserToDelete(null)
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Failed to delete user')
+    } finally {
+      setDeletingUserId(null)
+    }
+  }
+  const loadUsers = useCallback(async () => {
     setLoadingUsers(true)
     setErrorMsg('')
 
     try {
-      const res = await fetch('/api/admin/reviewers')
+      const res = await fetch('/api/admin/users')
       const json = await res.json()
 
       if (!res.ok) {
         throw new Error(json.error || 'Failed to load users')
       }
 
-      const reviewerUsers: ReviewerUser[] = json.reviewers ?? []
+      const users: ReviewerUser[] = json.users ?? []
 
       const allUsers: ReviewerUser[] = [
         ...(user
@@ -61,12 +94,12 @@ export function InviteUser({ onNavigate }: InviteUserProps) {
                 id: user.id,
                 name: user.name,
                 email: user.email,
-                role: user.role as 'reviewer' | 'admin',
+                role: user.role as UserRole,
                 avatar: user.avatar,
               },
             ]
           : []),
-        ...reviewerUsers.filter((u) => u.id !== user?.id),
+        ...users.filter((u) => u.id !== user?.id),
       ]
 
       setUsers(allUsers)
@@ -75,13 +108,13 @@ export function InviteUser({ onNavigate }: InviteUserProps) {
     } finally {
       setLoadingUsers(false)
     }
-  }
+  }, [user])
 
   useEffect(() => {
     loadUsers()
-  }, [])
+  }, [loadUsers])
 
-  const handleInvite = async (e: React.FormEvent) => {
+  const handleInvite = async (e: React.SubmitEvent<HTMLFormElement>) => {
     e.preventDefault()
     if (!email.trim() || !name.trim()) return
 
@@ -112,7 +145,6 @@ export function InviteUser({ onNavigate }: InviteUserProps) {
       setRole('reviewer')
 
       await loadUsers()
-
       setTimeout(() => setSuccessMsg(''), 3000)
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Failed to invite user')
@@ -242,9 +274,7 @@ export function InviteUser({ onNavigate }: InviteUserProps) {
                     className="p-4 flex items-center justify-between hover:bg-zinc-50 transition-colors"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 bg-zinc-100 rounded-full flex items-center justify-center text-zinc-500 font-medium">
-                        {u.name.charAt(0)}
-                      </div>
+                      <UserAvatar id={u.id} name={u.name} />
 
                       <div>
                         <div className="font-medium text-zinc-900 flex items-center gap-2">
@@ -265,7 +295,11 @@ export function InviteUser({ onNavigate }: InviteUserProps) {
                       <div className="flex flex-col items-end gap-1">
                         <Badge
                           variant={u.role === 'admin' ? 'default' : 'outline'}
-                          className={u.role === 'admin' ? 'bg-zinc-800' : ''}
+                          className={
+                            u.role === 'admin'
+                              ? 'bg-zinc-200 text-zinc-800'
+                              : ''
+                          }
                         >
                           <span className="inline-flex items-center gap-1">
                             {u.role === 'admin' ? (
@@ -279,6 +313,19 @@ export function InviteUser({ onNavigate }: InviteUserProps) {
 
                         <span className="text-xs text-emerald-600">Active</span>
                       </div>
+
+                      {u.id !== user?.id && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-zinc-400 hover:text-red-600 hover:bg-red-50"
+                          title="Delete user"
+                          onClick={() => openDeleteModal(u)}
+                          isLoading={deletingUserId === u.id}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
                     </div>
                   </div>
                 ))
@@ -287,6 +334,47 @@ export function InviteUser({ onNavigate }: InviteUserProps) {
           </Card>
         </div>
       </div>
+
+      <ConfirmModal
+        open={!!userToDelete}
+        title="Delete user?"
+        description="This action cannot be undone."
+        confirmText="Delete User"
+        cancelText="Cancel"
+        danger
+        loading={deletingUserId === userToDelete?.id}
+        onCancel={() => setUserToDelete(null)}
+        onConfirm={confirmDeleteUser}
+      >
+        {userToDelete && (
+          <>
+            <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
+              <div className="font-medium text-zinc-900">
+                {userToDelete.name}
+              </div>
+              <div className="mt-1 text-sm text-zinc-500">
+                {userToDelete.email}
+              </div>
+              <div className="mt-2">
+                <Badge
+                  variant={
+                    userToDelete.role === 'admin' ? 'default' : 'outline'
+                  }
+                  className={userToDelete.role === 'admin' ? 'bg-zinc-800' : ''}
+                >
+                  {userToDelete.role}
+                </Badge>
+              </div>
+            </div>
+
+            <p className="mt-4 text-sm text-zinc-600">
+              Deleting this user will remove their account access. Assigned
+              tasks may become unassigned depending on your database
+              constraints.
+            </p>
+          </>
+        )}
+      </ConfirmModal>
     </div>
   )
 }

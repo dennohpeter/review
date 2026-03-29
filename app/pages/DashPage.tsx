@@ -24,29 +24,19 @@ import {
   Users,
   MinusSquare,
 } from 'lucide-react'
-import { formatDate } from '@/app/lib/utils'
-import { Task, TaskStatus, User } from '@/app/types'
+import { formatDate, formatDuration } from '@/app/lib/utils'
+import {
+  AudioItemRow,
+  ReviewRow,
+  StatusFilter,
+  Task,
+  TaskStatus,
+  User,
+  ViewMode,
+} from '@/app/types'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/app/hooks'
 import { supabase } from '../lib/supabase/browser'
-
-type ViewMode = 'card' | 'list'
-type StatusFilter = 'all' | TaskStatus
-
-type AudioItemRow = {
-  id: string
-  title: string
-  transcript_original: string
-  created_at: string
-  assigned_to: string | null
-}
-
-type ReviewRow = {
-  id: string
-  audio_id: string
-  decision: 'approve' | 'suggest'
-  created_at: string
-}
 
 const FILTER_OPTIONS: {
   value: StatusFilter
@@ -124,7 +114,9 @@ export function DashPage() {
         ] = await Promise.all([
           supabase
             .from('audio_items')
-            .select('id,title,transcript_original,created_at,assigned_to')
+            .select(
+              'id,title,transcript_original,created_at,assigned_to,duration_seconds'
+            )
             .order('created_at', { ascending: false }),
           supabase
             .from('reviews')
@@ -154,8 +146,7 @@ export function DashPage() {
               status: deriveTaskStatus(itemReviews),
               createdAt: new Date(item.created_at),
               assignedTo: item.assigned_to ?? undefined,
-              duration: '--:--',
-              audioUrl: `https://${process.env.NEXT_PUBLIC_AWS_S3_BUCKET}.s3.${process.env.NEXT_PUBLIC_AWS_REGION}.amazonaws.com/${item.id}.mp3`,
+              duration: formatDuration(item.duration_seconds),
             }
           }
         )
@@ -596,19 +587,22 @@ function TaskSection({
   onToggleSelectAll?: () => void
 }) {
   const [page, setPage] = useState(0)
+
   const allSelected =
     tasks.length > 0 && tasks.every((t) => selectedIds.has(t.id))
   const someSelected = tasks.some((t) => selectedIds.has(t.id))
+
   const itemsPerPage = viewMode === 'card' ? 6 : 6
-  const totalPages = Math.ceil(tasks.length / itemsPerPage)
-  const pagedTasks = tasks.slice(page * itemsPerPage, (page + 1) * itemsPerPage)
+  const totalPages = Math.max(1, Math.ceil(tasks.length / itemsPerPage))
 
-  useEffect(() => {
-    setPage(0)
-  }, [tasks.length, viewMode])
+  const safePage = Math.min(page, totalPages - 1)
+  const pagedTasks = tasks.slice(
+    safePage * itemsPerPage,
+    (safePage + 1) * itemsPerPage
+  )
 
-  const canPrev = page > 0
-  const canNext = page < totalPages - 1
+  const canPrev = safePage > 0
+  const canNext = safePage < totalPages - 1
 
   return (
     <section>
@@ -649,7 +643,7 @@ function TaskSection({
                 <button
                   key={i}
                   onClick={() => setPage(i)}
-                  className={`h-2 rounded-full transition-all ${i === page ? 'w-6 bg-zinc-900' : 'w-2 bg-zinc-300 hover:bg-zinc-400'}`}
+                  className={`h-2 rounded-full transition-all ${i === safePage ? 'w-6 bg-zinc-900' : 'w-2 bg-zinc-300 hover:bg-zinc-400'}`}
                 />
               ))}
             </div>

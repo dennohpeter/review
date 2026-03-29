@@ -1,7 +1,8 @@
 import { getDicebearAvatar } from '@/app/lib/dicebear'
 import { createSupabaseServerClient } from '@/app/lib/supabase/server'
-import { User } from '@/app/types'
 import { NextResponse } from 'next/server'
+
+export const runtime = 'nodejs'
 
 export async function GET() {
   const supabase = await createSupabaseServerClient()
@@ -14,11 +15,15 @@ export async function GET() {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from('profiles')
     .select('role')
     .eq('user_id', user.id)
     .single()
+
+  if (profileError) {
+    return NextResponse.json({ error: profileError.message }, { status: 400 })
+  }
 
   if (profile?.role !== 'admin') {
     return NextResponse.json({ error: 'Admin only' }, { status: 403 })
@@ -27,20 +32,19 @@ export async function GET() {
   const { data, error } = await supabase
     .from('profiles')
     .select('user_id, role, name, email')
-    .eq('role', 'reviewer')
     .order('name', { ascending: true })
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 })
   }
 
-  const reviewers: User[] = (data ?? []).map((row) => ({
+  const users = (data ?? []).map((row) => ({
     id: row.user_id,
-    role: 'reviewer',
-    name: row.name ?? row.email?.split('@')[0] ?? 'Reviewer',
+    role: row.role,
+    name: row.name ?? row.email?.split('@')[0] ?? 'User',
     email: row.email ?? '',
     avatar: getDicebearAvatar({ seed: row.user_id }),
   }))
 
-  return NextResponse.json({ reviewers })
+  return NextResponse.json({ users })
 }

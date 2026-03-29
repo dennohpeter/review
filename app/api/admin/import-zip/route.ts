@@ -1,8 +1,10 @@
 import { BUCKET, s3 } from '@/app/lib'
 import { createSupabaseServerClient } from '@/app/lib/supabase/server'
+import { MatchedEntry } from '@/app/types'
 import { PutObjectCommand } from '@aws-sdk/client-s3'
 import AdmZip from 'adm-zip'
 import { randomUUID } from 'crypto'
+import { parseBuffer } from 'music-metadata'
 import { NextResponse } from 'next/server'
 
 const AUDIO_EXTENSIONS = new Set([
@@ -16,24 +18,6 @@ const AUDIO_EXTENSIONS = new Set([
 ])
 
 const TRANSCRIPT_EXTENSIONS = new Set(['.txt'])
-
-type MatchedEntry = {
-  baseName: string
-  audio?: {
-    entryName: string
-    fileName: string
-    ext: string
-    data: Buffer
-    size: number
-  }
-  transcript?: {
-    entryName: string
-    fileName: string
-    ext: string
-    data: Buffer
-    size: number
-  }
-}
 
 function getExtension(fileName: string): string {
   const idx = fileName.lastIndexOf('.')
@@ -267,6 +251,23 @@ export async function POST(req: Request) {
 
       if (!pair.audio || !pair.transcript) continue
 
+      const mimeType = getMimeType(pair.transcript.ext)
+      let durationSeconds: number | null = null
+
+      try {
+        const metadata = await parseBuffer(pair.audio.data, {
+          mimeType,
+          size: pair.audio.size,
+        })
+        durationSeconds = metadata.format.duration ?? null
+      } catch {
+        console.warn(
+          `Failed to parse audio metadata for ${pair.audio.fileName}, skipping duration.`
+        )
+
+        durationSeconds = null
+      }
+
       try {
         const rawTranscript = pair.transcript.data.toString('utf-8').trim()
 
@@ -288,7 +289,7 @@ export async function POST(req: Request) {
             Bucket: BUCKET,
             Key: audioKey,
             Body: pair.audio.data,
-            ContentType: getMimeType(pair.audio.ext),
+            ContentType: mimeType,
           })
         )
 
@@ -304,7 +305,8 @@ export async function POST(req: Request) {
             import_batch_id: importBatchId,
             original_filename: pair.audio.fileName,
             file_size_bytes: pair.audio.size,
-            mime_type: getMimeType(pair.audio.ext),
+            mime_type: mimeType,
+            duration_seconds: durationSeconds,
           })
           .select('id,title,audio_key')
           .single()

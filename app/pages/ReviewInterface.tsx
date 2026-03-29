@@ -19,37 +19,12 @@ import {
 } from 'lucide-react'
 import { useAuth } from '@/app/hooks'
 import { supabase } from '../lib/supabase/browser'
+import { ReviewRow, TaskStatus, AudioItemRow, Reviewer } from '../types'
 
 interface ReviewInterfaceProps {
   taskId: string
   onNavigate: (page: string, taskId?: string) => void
 }
-
-type AudioItemRow = {
-  id: string
-  title: string
-  transcript_original: string
-  created_at: string
-  assigned_to: string | null
-  audio_key: string
-}
-
-type ReviewRow = {
-  id: string
-  audio_id: string
-  decision: 'approve' | 'suggest'
-  suggested_text: string | null
-  comment: string | null
-  created_at: string
-}
-
-type Reviewer = {
-  id: string
-  name: string
-  email: string
-}
-
-type TaskStatus = 'pending' | 'approved' | 'changes_requested'
 
 function deriveTaskStatus(reviews: ReviewRow[]): TaskStatus {
   if (!reviews.length) return 'pending'
@@ -97,7 +72,7 @@ export function ReviewInterface({ taskId, onNavigate }: ReviewInterfaceProps) {
           supabase
             .from('audio_items')
             .select(
-              'id,title,transcript_original,created_at,assigned_to,audio_key'
+              'id,title,transcript_original,created_at,assigned_to,audio_key,duration_seconds'
             )
             .order('created_at', { ascending: false }),
           supabase
