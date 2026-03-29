@@ -45,6 +45,7 @@ export function ReviewInterface({ taskId, onNavigate }: ReviewInterfaceProps) {
   const [audioUrls, setAudioUrls] = useState<Record<string, string>>({})
 
   const [loading, setLoading] = useState(true)
+  const [audioLoading, setAudioLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [assigning, setAssigning] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -98,6 +99,7 @@ export function ReviewInterface({ taskId, onNavigate }: ReviewInterfaceProps) {
         if (currentUser.role === 'admin') {
           const reviewerRes = await fetch('/api/admin/reviewers')
           const reviewerJson = await reviewerRes.json()
+
           if (reviewerRes.ok) {
             reviewerRows = reviewerJson.reviewers ?? []
           }
@@ -147,48 +149,59 @@ export function ReviewInterface({ taskId, onNavigate }: ReviewInterfaceProps) {
     ? reviewers.find((u) => u.id === task.assigned_to)?.name
     : undefined
 
+  const currentTaskId = task?.id
+  const currentTranscript = task?.transcript_original
+  const currentAudioUrl = currentTaskId ? audioUrls[currentTaskId] : undefined
+
   useEffect(() => {
-    if (!task?.transcript_original) return
-    setSuggestion(latestSuggestion || task.transcript_original || '')
+    if (!currentTranscript) return
+    setSuggestion(latestSuggestion || currentTranscript)
     setMode('view')
-  }, [task?.id, latestSuggestion, task?.transcript_original])
+  }, [currentTranscript, latestSuggestion])
 
   useEffect(() => {
     let mounted = true
 
     const loadAudioUrl = async () => {
-      if (!task) return
-      if (audioUrls[task.id]) return
+      if (!currentTaskId || currentAudioUrl) return
 
-      const res = await fetch(`/api/audio-url?audioId=${task.id}`)
-      const json = await res.json()
+      setAudioLoading(true)
 
-      if (!mounted) return
+      try {
+        const res = await fetch(`/api/audio-url?audioId=${currentTaskId}`)
+        const json = await res.json()
 
-      if (!res.ok) {
-        setError(json.error || 'Failed to load audio')
-        return
+        if (!mounted) return
+
+        if (!res.ok) {
+          setError(json.error || 'Failed to load audio')
+          return
+        }
+
+        setAudioUrls((prev) => ({
+          ...prev,
+          [currentTaskId]: json.url,
+        }))
+      } finally {
+        if (mounted) setAudioLoading(false)
       }
-
-      setAudioUrls((prev) => ({
-        ...prev,
-        [task.id]: json.url,
-      }))
     }
 
     loadAudioUrl()
     return () => {
       mounted = false
     }
-  }, [task, audioUrls])
+  }, [currentTaskId, currentAudioUrl])
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (mode === 'edit') return
-      if (e.key === 'ArrowLeft' && prevTask?.id)
+      if (e.key === 'ArrowLeft' && prevTask?.id) {
         onNavigate('review', prevTask.id)
-      if (e.key === 'ArrowRight' && nextTask?.id)
+      }
+      if (e.key === 'ArrowRight' && nextTask?.id) {
         onNavigate('review', nextTask.id)
+      }
     }
 
     window.addEventListener('keydown', handleKeyDown)
@@ -208,10 +221,12 @@ export function ReviewInterface({ taskId, onNavigate }: ReviewInterfaceProps) {
     if (touchStartX.current == null || touchEndX.current == null) return
     const distance = touchStartX.current - touchEndX.current
 
-    if (distance > minSwipeDistance && nextTask?.id)
+    if (distance > minSwipeDistance && nextTask?.id) {
       onNavigate('review', nextTask.id)
-    if (distance < -minSwipeDistance && prevTask?.id)
+    }
+    if (distance < -minSwipeDistance && prevTask?.id) {
       onNavigate('review', prevTask.id)
+    }
   }
 
   const refreshReviewsForTask = async (audioId: string) => {
@@ -231,6 +246,7 @@ export function ReviewInterface({ taskId, onNavigate }: ReviewInterfaceProps) {
 
   const handleApprove = async () => {
     if (!task) return
+
     setSaving(true)
     setError(null)
 
@@ -284,6 +300,7 @@ export function ReviewInterface({ taskId, onNavigate }: ReviewInterfaceProps) {
 
   const handleAssign = async (userId: string | undefined) => {
     if (!task) return
+
     setAssigning(true)
     setError(null)
 
@@ -312,15 +329,7 @@ export function ReviewInterface({ taskId, onNavigate }: ReviewInterfaceProps) {
     }
   }
 
-  if (loading) {
-    return (
-      <div className="max-w-4xl mx-auto p-8 text-sm text-zinc-500">
-        Loading task...
-      </div>
-    )
-  }
-
-  if (!task) {
+  if (!loading && !task) {
     return (
       <div className="max-w-4xl mx-auto p-8 text-sm text-zinc-500">
         Task not found
@@ -350,7 +359,7 @@ export function ReviewInterface({ taskId, onNavigate }: ReviewInterfaceProps) {
             variant="ghost"
             size="icon"
             className="h-8 w-8 rounded-full"
-            disabled={!prevTask}
+            disabled={loading || !prevTask}
             onClick={() => prevTask && onNavigate('review', prevTask.id)}
             title="Previous Task (Left Arrow)"
           >
@@ -358,14 +367,16 @@ export function ReviewInterface({ taskId, onNavigate }: ReviewInterfaceProps) {
           </Button>
 
           <span className="text-xs font-medium text-zinc-500 px-2 min-w-[80px] text-center select-none">
-            Task {currentIndex + 1} of {visibleTasks.length}
+            {loading
+              ? 'Loading...'
+              : `Task ${currentIndex + 1} of ${visibleTasks.length}`}
           </span>
 
           <Button
             variant="ghost"
             size="icon"
             className="h-8 w-8 rounded-full"
-            disabled={!nextTask}
+            disabled={loading || !nextTask}
             onClick={() => nextTask && onNavigate('review', nextTask.id)}
             title="Next Task (Right Arrow)"
           >
@@ -375,46 +386,68 @@ export function ReviewInterface({ taskId, onNavigate }: ReviewInterfaceProps) {
       </div>
 
       <div className="flex items-start justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-3 mb-2">
-            <h1 className="text-2xl font-bold text-zinc-900">{task.title}</h1>
-            <Badge status={status} />
+        <div className="min-w-0">
+          <div className="flex items-center gap-3 mb-2 flex-wrap">
+            {loading ? (
+              <>
+                <div className="h-8 w-56 rounded bg-zinc-200 animate-pulse" />
+                <div className="h-6 w-24 rounded bg-zinc-200 animate-pulse" />
+              </>
+            ) : (
+              <>
+                <h1 className="text-2xl font-bold text-zinc-900">
+                  {task?.title}
+                </h1>
+                <Badge status={status} />
+              </>
+            )}
           </div>
 
           <div className="flex items-center gap-4 text-zinc-500 text-sm flex-wrap">
-            <span>
-              Task ID: {task.id} • Created{' '}
-              {new Date(task.created_at).toLocaleDateString()}
-            </span>
-
-            <div className="flex items-center gap-1.5">
-              <UserAvatar
-                id={task.assigned_to || ''}
-                name={assigneeName || 'Unassigned'}
-                size={16}
-              />
-              {assigneeName ? (
-                <span className="text-zinc-700 font-medium">
-                  {assigneeName}
+            {loading ? (
+              <>
+                <div className="h-4 w-48 rounded bg-zinc-100 animate-pulse" />
+                <div className="h-4 w-28 rounded bg-zinc-100 animate-pulse" />
+              </>
+            ) : (
+              <>
+                <span>
+                  Task ID: {task?.id} • Created{' '}
+                  {task ? new Date(task.created_at).toLocaleDateString() : ''}
                 </span>
-              ) : (
-                <span className="text-amber-600 font-medium">Unassigned</span>
-              )}
-            </div>
+
+                <div className="flex items-center gap-1.5">
+                  <UserAvatar
+                    id={task?.assigned_to || ''}
+                    name={assigneeName || 'Unassigned'}
+                    size={16}
+                  />
+                  {assigneeName ? (
+                    <span className="text-zinc-700 font-medium">
+                      {assigneeName}
+                    </span>
+                  ) : (
+                    <span className="text-amber-600 font-medium">
+                      Unassigned
+                    </span>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         </div>
 
         <div className="flex items-center gap-3">
-          {currentUser?.role === 'admin' && (
+          {!loading && currentUser?.role === 'admin' && (
             <AssignDropdown
               reviewers={reviewers}
-              value={task.assigned_to ?? undefined}
+              value={task?.assigned_to ?? undefined}
               onChange={handleAssign}
               disabled={assigning}
             />
           )}
 
-          {currentUser?.role === 'reviewer' && (
+          {!loading && currentUser?.role === 'reviewer' && (
             <>
               <Button
                 variant="danger"
@@ -444,11 +477,15 @@ export function ReviewInterface({ taskId, onNavigate }: ReviewInterfaceProps) {
         </div>
       )}
 
-      <AudioPlayer
-        key={task.id}
-        src={audioUrls[task.id]}
-        className="shadow-sm"
-      />
+      {loading || audioLoading || !task ? (
+        <AudioPlayerSkeleton />
+      ) : (
+        <AudioPlayer
+          key={task.id}
+          src={audioUrls[task.id]}
+          className="shadow-sm"
+        />
+      )}
 
       <div className="grid md:grid-cols-2 gap-6">
         <Card className="h-full flex flex-col">
@@ -459,7 +496,11 @@ export function ReviewInterface({ taskId, onNavigate }: ReviewInterfaceProps) {
           </div>
 
           <div className="p-6 text-zinc-600 leading-relaxed text-lg whitespace-pre-wrap">
-            {task.transcript_original}
+            {loading ? (
+              <TextBlockSkeleton lines={8} />
+            ) : (
+              task?.transcript_original
+            )}
           </div>
         </Card>
 
@@ -475,7 +516,7 @@ export function ReviewInterface({ taskId, onNavigate }: ReviewInterfaceProps) {
                 : 'Reviewer Notes'}
             </h3>
 
-            {mode === 'edit' && (
+            {mode === 'edit' && !loading && (
               <span className="text-xs font-medium text-amber-600 flex items-center">
                 <AlertTriangle className="h-3 w-3 mr-1" />
                 Editing Mode
@@ -484,7 +525,9 @@ export function ReviewInterface({ taskId, onNavigate }: ReviewInterfaceProps) {
           </div>
 
           <div className="p-6 flex-1 flex flex-col">
-            {mode === 'edit' ? (
+            {loading ? (
+              <TextBlockSkeleton lines={8} />
+            ) : mode === 'edit' ? (
               <>
                 <Textarea
                   value={suggestion}
@@ -579,7 +622,9 @@ function AssignDropdown({
         <UserIcon className="h-3.5 w-3.5" />
         {selected ? `Assigned: ${selected.name}` : 'Assign Reviewer'}
         <ChevronDown
-          className={`h-3.5 w-3.5 transition-transform ${open ? 'rotate-180' : ''}`}
+          className={`h-3.5 w-3.5 transition-transform ${
+            open ? 'rotate-180' : ''
+          }`}
         />
       </Button>
 
@@ -623,6 +668,39 @@ function AssignDropdown({
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+function AudioPlayerSkeleton() {
+  return (
+    <div className="bg-zinc-50 rounded-lg border border-zinc-200 p-4 shadow-sm">
+      <div className="flex items-center gap-4">
+        <div className="h-12 w-12 rounded-full bg-zinc-200 animate-pulse shrink-0" />
+        <div className="flex-1 space-y-3">
+          <div className="h-12 rounded bg-zinc-100 animate-pulse" />
+          <div className="h-2 rounded bg-zinc-100 animate-pulse" />
+          <div className="flex justify-between">
+            <div className="h-3 w-10 rounded bg-zinc-100 animate-pulse" />
+            <div className="h-3 w-10 rounded bg-zinc-100 animate-pulse" />
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function TextBlockSkeleton({ lines = 6 }: { lines?: number }) {
+  return (
+    <div className="space-y-3">
+      {Array.from({ length: lines }).map((_, i) => (
+        <div
+          key={i}
+          className={`h-4 rounded bg-zinc-100 animate-pulse ${
+            i === lines - 1 ? 'w-2/3' : 'w-full'
+          }`}
+        />
+      ))}
     </div>
   )
 }

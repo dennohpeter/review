@@ -155,14 +155,14 @@ export function DashPage() {
         let fetchedReviewers: User[] = []
 
         if (currentUser?.role === 'admin') {
-          const reviewerRes = await fetch('/api/admin/reviewers')
-          const reviewerJson = await reviewerRes.json()
+          const usersRes = await fetch('/api/admin/users')
+          const usersJson = await usersRes.json()
 
-          if (!reviewerRes.ok) {
-            throw new Error(reviewerJson.error || 'Failed to fetch reviewers')
+          if (!usersRes.ok) {
+            throw new Error(usersJson.error || 'Failed to fetch reviewers')
           }
 
-          fetchedReviewers = reviewerJson.reviewers ?? []
+          fetchedReviewers = usersJson.users ?? []
         }
 
         if (!mounted) return
@@ -269,10 +269,6 @@ export function DashPage() {
 
   const clearSelection = () => setSelectedIds(new Set())
 
-  if (loading) {
-    return <div className="p-8 text-sm text-zinc-500">Loading tasks...</div>
-  }
-
   return (
     <div className="space-y-8 pb-24">
       <div className="flex items-center justify-between">
@@ -321,7 +317,14 @@ export function DashPage() {
       )}
 
       <div className="space-y-6">
-        {showSections ? (
+        {loading ? (
+          <>
+            <SectionSkeleton title="Pending Review" viewMode={viewMode} />
+            {showSections && (
+              <SectionSkeleton title="Completed" viewMode={viewMode} />
+            )}
+          </>
+        ) : showSections ? (
           <>
             <TaskSection
               title="Pending Review"
@@ -909,6 +912,77 @@ function TaskRow({
         className="h-4 w-4 text-zinc-300 group-hover:text-zinc-500 transition-colors shrink-0 cursor-pointer"
         onClick={() => onNavigate('review', task.id)}
       />
+    </div>
+  )
+}
+
+function SectionSkeleton({
+  title,
+  viewMode,
+}: {
+  title: string
+  viewMode: ViewMode
+}) {
+  return (
+    <section>
+      <div className="flex items-center justify-between mb-4">
+        <div className="h-6 w-40 rounded bg-zinc-200 animate-pulse" />
+        <div className="h-8 w-24 rounded bg-zinc-200 animate-pulse" />
+      </div>
+
+      {viewMode === 'card' ? (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <TaskCardSkeleton key={i} />
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-xl border border-zinc-200 bg-white overflow-hidden">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <TaskRowSkeleton key={i} isLast={i === 5} />
+          ))}
+        </div>
+      )}
+    </section>
+  )
+}
+
+function TaskCardSkeleton() {
+  return (
+    <Card className="p-6 space-y-4">
+      <div className="flex items-start justify-between">
+        <div className="h-6 w-24 rounded bg-zinc-200 animate-pulse" />
+        <div className="h-4 w-12 rounded bg-zinc-200 animate-pulse" />
+      </div>
+
+      <div className="space-y-2">
+        <div className="h-5 w-3/4 rounded bg-zinc-200 animate-pulse" />
+        <div className="h-4 w-full rounded bg-zinc-100 animate-pulse" />
+        <div className="h-4 w-5/6 rounded bg-zinc-100 animate-pulse" />
+      </div>
+
+      <div className="pt-4 border-t border-zinc-100 flex items-center justify-between">
+        <div className="h-4 w-24 rounded bg-zinc-100 animate-pulse" />
+        <div className="h-4 w-16 rounded bg-zinc-100 animate-pulse" />
+      </div>
+    </Card>
+  )
+}
+
+function TaskRowSkeleton({ isLast }: { isLast: boolean }) {
+  return (
+    <div
+      className={`flex items-center gap-4 px-5 py-4 ${
+        !isLast ? 'border-b border-zinc-100' : ''
+      }`}
+    >
+      <div className="h-10 w-10 rounded-lg bg-zinc-200 animate-pulse shrink-0" />
+      <div className="flex-1 min-w-0 space-y-2">
+        <div className="h-4 w-1/3 rounded bg-zinc-200 animate-pulse" />
+        <div className="h-4 w-2/3 rounded bg-zinc-100 animate-pulse" />
+      </div>
+      <div className="h-4 w-16 rounded bg-zinc-100 animate-pulse shrink-0" />
+      <div className="h-5 w-20 rounded bg-zinc-200 animate-pulse shrink-0" />
     </div>
   )
 }
