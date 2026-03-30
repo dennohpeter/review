@@ -407,8 +407,47 @@ export function ReviewInterface({ taskId }: ReviewInterfaceProps) {
 
   if (!loading && !task) {
     return (
-      <div className="max-w-4xl mx-auto p-8 text-sm text-zinc-500">
-        Task not found
+      <div className="max-w-3xl mx-auto min-h-[70vh] flex items-center justify-center px-4">
+        <Card className="w-full max-w-xl border-zinc-200 shadow-sm">
+          <div className="p-8 sm:p-10 text-center">
+            <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-500">
+              <AlertTriangle className="h-6 w-6" />
+            </div>
+
+            <h1 className="text-2xl font-semibold text-zinc-900">
+              Task is unavailable
+            </h1>
+
+            <p className="mt-3 text-sm leading-6 text-zinc-500 max-w-md mx-auto">
+              This review task may have been removed, reassigned, or you may no
+              longer have access to it.
+            </p>
+
+            <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-xs text-zinc-600">
+              <span className="font-medium text-zinc-700">Task ID</span>
+              <span className="font-mono">{taskId.slice(0, 8)}</span>
+            </div>
+
+            <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
+              <Button
+                variant="ghost"
+                onClick={() => router.back()}
+                className="w-full sm:w-auto rounded-xl"
+              >
+                <ChevronLeft className="h-4 w-4 mr-2" />
+                Go Back
+              </Button>
+
+              <Button
+                onClick={() => onNavigate('dashboard')}
+                className="w-full sm:w-auto rounded-xl"
+              >
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Back to Dashboard
+              </Button>
+            </div>
+          </div>
+        </Card>
       </div>
     )
   }
