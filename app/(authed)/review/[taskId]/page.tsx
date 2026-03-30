@@ -7,7 +7,5 @@ export default async function ReviewPage({
 }) {
   const { taskId } = await params
 
-  console.log('Rendering ReviewPage for taskId:', taskId)
-
   return <ReviewInterface taskId={taskId} />
 }
