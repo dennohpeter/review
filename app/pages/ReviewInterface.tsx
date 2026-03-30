@@ -24,7 +24,7 @@ import { supabase } from '@/app/lib/supabase/browser'
 import { ReviewRow, TaskStatus, AudioItemRow, Reviewer } from '@/app/types'
 import { UserAvatar } from '@/app/components/ui/UserAvatar'
 import { useRouter } from 'next/navigation'
-import { useAuth } from '../hooks'
+import { useAuth } from '@/app/hooks'
 
 interface ReviewInterfaceProps {
   taskId: string

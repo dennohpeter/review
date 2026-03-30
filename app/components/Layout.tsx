@@ -6,8 +6,8 @@ import { Headphones, LogOut } from 'lucide-react'
 import { useAuth } from '@/app/hooks/useAuth'
 import { UserAvatar } from './ui/UserAvatar'
 import { usePathname, useRouter } from 'next/navigation'
-import { User } from '../types'
-import { useIdleLogout } from '../hooks'
+import { User } from '@/app/types'
+import { useIdleLogout } from '@/app/hooks'
 import { SessionTimeoutModal } from './ui/SessionTimeoutModal'
 
 interface LayoutProps {

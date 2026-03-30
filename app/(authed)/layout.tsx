@@ -1,8 +1,8 @@
 import { Layout } from '@/app/components/Layout'
 import { createSupabaseServerClient } from '@/app/lib/supabase/server'
 import { redirect } from 'next/navigation'
-import { UserRole } from '../types'
-import { getDicebearAvatar } from '../lib/dicebear'
+import { UserRole } from '@/app/types'
+import { getDicebearAvatar } from '@/app/lib/dicebear'
 
 export default async function AuthedLayout({
   children,
