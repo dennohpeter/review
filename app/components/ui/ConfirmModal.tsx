@@ -11,6 +11,7 @@ interface ConfirmModalProps {
   cancelText?: string
   loading?: boolean
   danger?: boolean
+  disableBackdropClose?: boolean
   onConfirm: () => void
   onCancel: () => void
   children?: React.ReactNode
@@ -24,6 +25,7 @@ export function ConfirmModal({
   cancelText = 'Cancel',
   loading = false,
   danger = false,
+  disableBackdropClose = false,
   onConfirm,
   onCancel,
   children,
@@ -33,7 +35,11 @@ export function ConfirmModal({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-      onClick={onCancel}
+      onClick={() => {
+        if (!disableBackdropClose && !loading) {
+          onCancel()
+        }
+      }}
     >
       <div
         className="w-full max-w-md rounded-2xl bg-white shadow-2xl border border-zinc-200"

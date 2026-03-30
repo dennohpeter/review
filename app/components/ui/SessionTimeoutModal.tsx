@@ -29,6 +29,7 @@ export function SessionTimeoutModal({
       loading={loading}
       onConfirm={onStaySignedIn}
       onCancel={onLogoutNow}
+      disableBackdropClose
     >
       <div className="space-y-4">
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
@@ -39,10 +40,7 @@ export function SessionTimeoutModal({
 
             <div>
               <div className="text-sm text-zinc-600">Automatic logout in</div>
-              <div className="text-2xl font-semibold text-zinc-900">
-                {formatCountdown(secondsLeft)}
-              </div>
-              {/* <p
+              <div
                 className={`text-2xl font-semibold ${
                   secondsLeft <= 30
                     ? 'text-red-600 animate-pulse'
@@ -50,7 +48,7 @@ export function SessionTimeoutModal({
                 }`}
               >
                 {formatCountdown(secondsLeft)}
-              </p> */}
+              </div>
             </div>
           </div>
         </div>

@@ -29,6 +29,12 @@ export function useIdleLogout({
   const [isWarningOpen, setIsWarningOpen] = useState(false)
   const [secondsLeft, setSecondsLeft] = useState(Math.floor(warningMs / 1000))
 
+  const warningOpenRef = useRef(false)
+
+  useEffect(() => {
+    warningOpenRef.current = isWarningOpen
+  }, [isWarningOpen])
+
   const clearTimers = useCallback(() => {
     if (warningTimerRef.current) {
       clearTimeout(warningTimerRef.current)
@@ -92,7 +98,6 @@ export function useIdleLogout({
     }
 
     const events: Array<keyof WindowEventMap> = [
-      'mousemove',
       'mousedown',
       'keydown',
       'scroll',
@@ -100,6 +105,8 @@ export function useIdleLogout({
     ]
 
     const handleActivity = () => {
+      if (warningOpenRef.current) return
+
       startTimers()
     }
 

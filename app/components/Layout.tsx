@@ -52,8 +52,8 @@ export function Layout({ children, user }: LayoutProps) {
   }
   const { isWarningOpen, secondsLeft, staySignedIn, logoutNow } = useIdleLogout(
     {
-      timeoutMs: 2 * 60 * 1000, // 12 minutes
-      warningMs: 1 * 60 * 1000, // 1 minute
+      timeoutMs: 15 * 60 * 1000, // 15 minutes
+      warningMs: 2 * 60 * 1000, // 2 minutes
       enabled: !!user, // only enable if user is logged in
     }
   )
