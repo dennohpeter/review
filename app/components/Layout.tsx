@@ -7,6 +7,8 @@ import { useAuth } from '@/app/hooks/useAuth'
 import { UserAvatar } from './ui/UserAvatar'
 import { usePathname, useRouter } from 'next/navigation'
 import { User } from '../types'
+import { useIdleLogout } from '../hooks'
+import { SessionTimeoutModal } from './ui/SessionTimeoutModal'
 
 interface LayoutProps {
   children: React.ReactNode
@@ -48,86 +50,101 @@ export function Layout({ children, user }: LayoutProps) {
         router.push('/')
     }
   }
-
+  const { isWarningOpen, secondsLeft, staySignedIn, logoutNow } = useIdleLogout(
+    {
+      timeoutMs: 2 * 60 * 1000, // 12 minutes
+      warningMs: 1 * 60 * 1000, // 1 minute
+      enabled: !!user, // only enable if user is logged in
+    }
+  )
   return (
-    <div className="min-h-screen bg-zinc-50 font-sans text-zinc-900">
-      <header className="sticky top-0 z-30 w-full border-b border-zinc-200 bg-white/80 backdrop-blur-md">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <div
-            className="flex items-center gap-2 cursor-pointer"
-            onClick={() => onNavigate('dashboard')}
-          >
-            <div className="h-8 w-8 bg-zinc-900 rounded-lg flex items-center justify-center text-white">
-              <Headphones className="h-5 w-5" />
-            </div>
-            <span className="font-bold text-lg tracking-tight">
-              AudioScribe
-            </span>
-          </div>
-
-          <div className="flex items-center gap-6">
-            <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-zinc-600">
-              <button
-                onClick={() => onNavigate('dashboard')}
-                className={`hover:text-zinc-900 transition-colors ${
-                  currentPage === 'dashboard' ? 'text-zinc-900' : ''
-                }`}
-              >
-                Dashboard
-              </button>
-
-              {user.role === 'admin' && (
-                <>
-                  <button
-                    onClick={() => onNavigate('upload')}
-                    className={`hover:text-zinc-900 transition-colors ${
-                      currentPage === 'upload' ? 'text-zinc-900' : ''
-                    }`}
-                  >
-                    Upload New
-                  </button>
-
-                  <button
-                    onClick={() => onNavigate('invite')}
-                    className={`hover:text-zinc-900 transition-colors ${
-                      currentPage === 'invite' ? 'text-zinc-900' : ''
-                    }`}
-                  >
-                    Team
-                  </button>
-                </>
-              )}
-            </nav>
-
-            <div className="h-6 w-px bg-zinc-200 hidden md:block" />
-
-            <div className="flex items-center gap-3">
-              <div className="flex flex-col items-end mr-1">
-                <span className="text-sm font-medium">{user.name}</span>
-                <span className="text-xs text-zinc-500 capitalize">
-                  {user.role}
-                </span>
+    <>
+      <div className="min-h-screen bg-zinc-50 font-sans text-zinc-900">
+        <header className="sticky top-0 z-30 w-full border-b border-zinc-200 bg-white/80 backdrop-blur-md">
+          <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+            <div
+              className="flex items-center gap-2 cursor-pointer"
+              onClick={() => onNavigate('dashboard')}
+            >
+              <div className="h-8 w-8 bg-zinc-900 rounded-lg flex items-center justify-center text-white">
+                <Headphones className="h-5 w-5" />
               </div>
+              <span className="font-bold text-lg tracking-tight">
+                AudioScribe
+              </span>
+            </div>
 
-              <div className="h-9 w-9 rounded-full bg-zinc-200 overflow-hidden ring-2 ring-white">
-                <UserAvatar id={user.id} name={user.name} size={36} />
+            <div className="flex items-center gap-6">
+              <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-zinc-600">
+                <button
+                  onClick={() => onNavigate('dashboard')}
+                  className={`hover:text-zinc-900 transition-colors ${
+                    currentPage === 'dashboard' ? 'text-zinc-900' : ''
+                  }`}
+                >
+                  Dashboard
+                </button>
+
+                {user.role === 'admin' && (
+                  <>
+                    <button
+                      onClick={() => onNavigate('upload')}
+                      className={`hover:text-zinc-900 transition-colors ${
+                        currentPage === 'upload' ? 'text-zinc-900' : ''
+                      }`}
+                    >
+                      Upload New
+                    </button>
+
+                    <button
+                      onClick={() => onNavigate('invite')}
+                      className={`hover:text-zinc-900 transition-colors ${
+                        currentPage === 'invite' ? 'text-zinc-900' : ''
+                      }`}
+                    >
+                      Team
+                    </button>
+                  </>
+                )}
+              </nav>
+
+              <div className="h-6 w-px bg-zinc-200 hidden md:block" />
+
+              <div className="flex items-center gap-3">
+                <div className="flex flex-col items-end mr-1">
+                  <span className="text-sm font-medium">{user.name}</span>
+                  <span className="text-xs text-zinc-500 capitalize">
+                    {user.role}
+                  </span>
+                </div>
+
+                <div className="h-9 w-9 rounded-full bg-zinc-200 overflow-hidden ring-2 ring-white">
+                  <UserAvatar id={user.id} name={user.name} size={36} />
+                </div>
+
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleLogout}
+                  title="Sign Out"
+                  className="text-zinc-500 hover:text-red-600 hover:bg-red-50"
+                >
+                  <LogOut className="h-5 w-5" />
+                </Button>
               </div>
-
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={handleLogout}
-                title="Sign Out"
-                className="text-zinc-500 hover:text-red-600 hover:bg-red-50"
-              >
-                <LogOut className="h-5 w-5" />
-              </Button>
             </div>
           </div>
-        </div>
-      </header>
+        </header>
 
-      <main className="container mx-auto px-4 py-8">{children}</main>
-    </div>
+        <main className="container mx-auto px-4 py-8">{children}</main>
+      </div>
+
+      <SessionTimeoutModal
+        open={isWarningOpen}
+        secondsLeft={secondsLeft}
+        onStaySignedIn={staySignedIn}
+        onLogoutNow={logoutNow}
+      />
+    </>
   )
 }
