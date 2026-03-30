@@ -4360,6 +4360,11 @@ uri-js@^4.2.2:
   dependencies:
     punycode "^2.1.0"
 
+wavesurfer.js@^7.12.5:
+  version "7.12.5"
+  resolved "https://registry.yarnpkg.com/wavesurfer.js/-/wavesurfer.js-7.12.5.tgz#09f435b62e2171e9a5520c4f18c75a56a874b888"
+  integrity sha512-MSZcA13R9ZlxgYpzfakaSYf8dz5tCdZKYbjtN1qnKbCi+UoyfaTuhvjlXHrITi/fgeO3qWfsH7U3BP1AKnwRNg==
+
 which-boxed-primitive@^1.1.0, which-boxed-primitive@^1.1.1:
   version "1.1.1"
   resolved "https://registry.yarnpkg.com/which-boxed-primitive/-/which-boxed-primitive-1.1.1.tgz#d76ec27df7fa165f18d5808374a5fe23c29b176e"

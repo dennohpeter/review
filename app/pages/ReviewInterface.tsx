@@ -17,15 +17,17 @@ import {
   ChevronRight,
   ChevronDown,
   User as UserIcon,
+  CheckCircle2,
+  Sparkles,
 } from 'lucide-react'
-import { useAuth } from '@/app/hooks'
 import { supabase } from '@/app/lib/supabase/browser'
 import { ReviewRow, TaskStatus, AudioItemRow, Reviewer } from '@/app/types'
 import { UserAvatar } from '@/app/components/ui/UserAvatar'
+import { useRouter } from 'next/navigation'
+import { useAuth } from '../hooks'
 
 interface ReviewInterfaceProps {
   taskId: string
-  onNavigate: (page: string, taskId?: string) => void
 }
 
 function deriveTaskStatus(reviews: ReviewRow[]): TaskStatus {
@@ -35,9 +37,11 @@ function deriveTaskStatus(reviews: ReviewRow[]): TaskStatus {
   return 'pending'
 }
 
-export function ReviewInterface({ taskId, onNavigate }: ReviewInterfaceProps) {
-  const { user: currentUser } = useAuth()
-
+function shortTaskId(id?: string) {
+  if (!id) return ''
+  return id.slice(0, 8)
+}
+export function ReviewInterface({ taskId }: ReviewInterfaceProps) {
   const [tasks, setTasks] = useState<AudioItemRow[]>([])
   const [reviewers, setReviewers] = useState<Reviewer[]>([])
   const [reviewsByAudioId, setReviewsByAudioId] = useState<
@@ -62,11 +66,37 @@ export function ReviewInterface({ taskId, onNavigate }: ReviewInterfaceProps) {
   const touchEndX = useRef<number | null>(null)
   const minSwipeDistance = 50
 
+  const { user } = useAuth()
+  const router = useRouter()
+
+  const onNavigate = (page: string, nextTaskId?: string) => {
+    if (page === 'dashboard') {
+      router.push('/')
+      return
+    }
+
+    if (page === 'review' && nextTaskId) {
+      router.push(`/review/${nextTaskId}`)
+      return
+    }
+
+    if (page === 'upload') {
+      router.push('/upload')
+      return
+    }
+
+    if (page === 'invite') {
+      router.push('/invite')
+      return
+    }
+
+    router.push('/')
+  }
   useEffect(() => {
     let mounted = true
 
     const load = async () => {
-      if (!currentUser) return
+      if (!user) return
 
       setLoading(true)
       setError(null)
@@ -101,7 +131,7 @@ export function ReviewInterface({ taskId, onNavigate }: ReviewInterfaceProps) {
         }
 
         let reviewerRows: Reviewer[] = []
-        if (currentUser.role === 'admin') {
+        if (user?.role === 'admin') {
           const reviewerRes = await fetch('/api/admin/users')
           const reviewerJson = await reviewerRes.json()
 
@@ -128,13 +158,13 @@ export function ReviewInterface({ taskId, onNavigate }: ReviewInterfaceProps) {
     return () => {
       mounted = false
     }
-  }, [currentUser])
+  }, [user])
 
   const visibleTasks = useMemo(() => {
-    if (!currentUser) return []
-    if (currentUser.role === 'admin') return tasks
-    return tasks.filter((t) => t.assigned_to === currentUser.id)
-  }, [tasks, currentUser])
+    if (!user) return []
+    if (user?.role === 'admin') return tasks
+    return tasks.filter((t) => t.assigned_to === user.id)
+  }, [tasks, user])
 
   const currentIndex = visibleTasks.findIndex((t) => t.id === taskId)
   const task = currentIndex >= 0 ? visibleTasks[currentIndex] : undefined
@@ -150,9 +180,15 @@ export function ReviewInterface({ taskId, onNavigate }: ReviewInterfaceProps) {
     [...taskReviews].find((r) => r.decision === 'suggest')?.suggested_text ??
     null
 
-  const assigneeName = task?.assigned_to
-    ? reviewers.find((u) => u.id === task.assigned_to)?.name
-    : undefined
+  const assigneeName = useMemo(() => {
+    if (!task?.assigned_to) return undefined
+
+    if (task.assigned_to === user?.id) {
+      return user.name
+    }
+
+    return reviewers.find((u) => u.id === task.assigned_to)?.name
+  }, [task?.assigned_to, reviewers, user?.id, user?.name])
 
   const currentTaskId = task?.id
   const currentTranscript = task?.transcript_original
@@ -432,33 +468,37 @@ export function ReviewInterface({ taskId, onNavigate }: ReviewInterfaceProps) {
             ) : (
               <>
                 <span>
-                  Task ID: {task?.id} • Created{' '}
+                  Task ID: {shortTaskId(task?.id)} • Created{' '}
                   {task ? new Date(task.created_at).toLocaleDateString() : ''}
                 </span>
 
-                <div className="flex items-center gap-1.5">
-                  <UserAvatar
-                    id={task?.assigned_to || ''}
-                    name={assigneeName || 'Unassigned'}
-                    size={16}
-                  />
-                  {assigneeName ? (
-                    <span className="text-zinc-700 font-medium">
-                      {assigneeName}
-                    </span>
-                  ) : (
-                    <span className="text-amber-600 font-medium">
-                      Unassigned
-                    </span>
-                  )}
-                </div>
+                {task?.assigned_to ? (
+                  <div className="flex items-center gap-1.5">
+                    <UserAvatar
+                      id={task.assigned_to}
+                      name={assigneeName || 'User'}
+                      size={16}
+                    />
+                    {assigneeName ? (
+                      <span className="text-zinc-700 font-medium">
+                        {assigneeName}
+                      </span>
+                    ) : (
+                      <span className="text-zinc-500 font-medium">
+                        Assigned
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <span className="text-amber-600 font-medium">Unassigned</span>
+                )}
               </>
             )}
           </div>
         </div>
 
         <div className="flex items-center gap-3">
-          {!loading && currentUser?.role === 'admin' && (
+          {!loading && user?.role === 'admin' && (
             <AssignDropdown
               reviewers={reviewers}
               value={task?.assigned_to ?? undefined}
@@ -467,14 +507,15 @@ export function ReviewInterface({ taskId, onNavigate }: ReviewInterfaceProps) {
             />
           )}
 
-          {!loading && currentUser?.role === 'reviewer' && (
-            <>
+          {!loading && user?.role === 'reviewer' && (
+            <div className="flex items-center gap-3">
               <Button
-                variant="danger"
+                variant="outline"
                 onClick={() => setMode('edit')}
                 disabled={saving}
+                className="h-10 rounded-xl border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 hover:border-amber-300 shadow-sm"
               >
-                <X className="h-4 w-4 mr-2" />
+                <Sparkles className="h-4 w-4 mr-2" />
                 Suggest Changes
               </Button>
 
@@ -482,11 +523,12 @@ export function ReviewInterface({ taskId, onNavigate }: ReviewInterfaceProps) {
                 variant="success"
                 onClick={handleApprove}
                 disabled={saving}
+                className="h-10 rounded-xl shadow-sm"
               >
-                <Check className="h-4 w-4 mr-2" />
+                <CheckCircle2 className="h-4 w-4 mr-2" />
                 Approve
               </Button>
-            </>
+            </div>
           )}
         </div>
       </div>
@@ -503,6 +545,7 @@ export function ReviewInterface({ taskId, onNavigate }: ReviewInterfaceProps) {
         <AudioPlayer
           key={task.id}
           src={audioUrls[task.id]}
+          title={task.title}
           className="shadow-sm"
         />
       )}
@@ -556,11 +599,12 @@ export function ReviewInterface({ taskId, onNavigate }: ReviewInterfaceProps) {
                   placeholder="Make corrections here..."
                 />
 
-                <div className="mt-4 pt-4 border-t border-zinc-100 flex justify-end gap-2">
+                <div className="mt-4 pt-4 border-t border-zinc-100 flex items-center justify-between gap-2">
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={() => setMode('view')}
+                    className="rounded-lg"
                   >
                     Cancel
                   </Button>
@@ -569,6 +613,7 @@ export function ReviewInterface({ taskId, onNavigate }: ReviewInterfaceProps) {
                     size="sm"
                     onClick={handleRequestChanges}
                     isLoading={saving}
+                    className="rounded-lg bg-amber-600 hover:bg-amber-700 text-white shadow-sm"
                   >
                     <Save className="h-4 w-4 mr-2" />
                     Submit Changes
@@ -582,16 +627,23 @@ export function ReviewInterface({ taskId, onNavigate }: ReviewInterfaceProps) {
                     {latestSuggestion}
                   </div>
                 ) : (
-                  <div className="h-full flex flex-col items-center justify-center text-zinc-400 text-sm italic min-h-[200px]">
-                    <p>No changes suggested yet.</p>
+                  <div className="h-full flex flex-col items-center justify-center text-center min-h-[200px]">
+                    <div className="h-12 w-12 rounded-full bg-zinc-100 flex items-center justify-center mb-4">
+                      <Sparkles className="h-5 w-5 text-zinc-400" />
+                    </div>
 
-                    {currentUser?.role === 'reviewer' && (
+                    <p className="text-zinc-500 text-sm italic">
+                      No changes suggested yet.
+                    </p>
+
+                    {user?.role === 'reviewer' && (
                       <Button
                         variant="outline"
                         size="sm"
-                        className="mt-4"
+                        className="mt-4 rounded-lg"
                         onClick={() => setMode('edit')}
                       >
+                        <Sparkles className="h-4 w-4 mr-2" />
                         Start Editing
                       </Button>
                     )}

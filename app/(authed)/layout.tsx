@@ -1,6 +1,8 @@
 import { Layout } from '@/app/components/Layout'
 import { createSupabaseServerClient } from '@/app/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import { UserRole } from '../types'
+import { getDicebearAvatar } from '../lib/dicebear'
 
 export default async function AuthedLayout({
   children,
@@ -17,5 +19,27 @@ export default async function AuthedLayout({
     redirect('/login')
   }
 
-  return <Layout>{children}</Layout>
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role,name')
+    .eq('user_id', user.id)
+    .single()
+
+  return (
+    <Layout
+      user={{
+        id: user.id,
+        name:
+          user.user_metadata?.name ??
+          profile?.name ??
+          user.email?.split('@')[0] ??
+          'User',
+        email: user.email ?? '',
+        role: profile?.role as UserRole,
+        avatar: getDicebearAvatar({ seed: user.id }),
+      }}
+    >
+      {children}
+    </Layout>
+  )
 }

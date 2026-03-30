@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useMemo, useRef, useState, useEffect } from 'react'
 import { Card } from '@/app/components/ui/Card'
 import { Badge } from '@/app/components/ui/Badge'
 import { Button } from '@/app/components/ui/Button'
@@ -25,20 +25,17 @@ import {
   Users,
   MinusSquare,
 } from 'lucide-react'
-import { formatDate, formatDuration } from '@/app/lib/utils'
-import {
-  AudioItemRow,
-  ReviewRow,
-  StatusFilter,
-  Task,
-  TaskStatus,
-  User,
-  ViewMode,
-} from '@/app/types'
+import { formatDate } from '@/app/lib/utils'
+import { StatusFilter, Task, User, UserRole, ViewMode } from '@/app/types'
 import { useRouter } from 'next/navigation'
-import { useAuth } from '@/app/hooks'
-import { supabase } from '@/app/lib/supabase/browser'
 import { UserAvatar } from '@/app/components/ui/UserAvatar'
+
+interface DashPageProps {
+  initialTasks: Task[]
+  initialUsers: User[]
+  currentUserId: string
+  currentUserRole: UserRole
+}
 
 const FILTER_OPTIONS: {
   value: StatusFilter
@@ -72,16 +69,13 @@ const FILTER_OPTIONS: {
   },
 ]
 
-function deriveTaskStatus(reviews: ReviewRow[]): TaskStatus {
-  if (!reviews.length) return 'pending'
-  if (reviews.some((r) => r.decision === 'suggest')) return 'changes_requested'
-  if (reviews.some((r) => r.decision === 'approve')) return 'approved'
-  return 'pending'
-}
-
-export function DashPage() {
+export function DashPage({
+  initialTasks,
+  initialUsers,
+  currentUserId,
+  currentUserRole,
+}: DashPageProps) {
   const router = useRouter()
-  const { user: currentUser } = useAuth()
 
   const onNavigate = (page: string, taskId?: string) => {
     if (page === 'review' && taskId) router.push(`/review/${taskId}`)
@@ -90,9 +84,8 @@ export function DashPage() {
     else router.push('/')
   }
 
-  const [tasks, setTasks] = useState<Task[]>([])
-  const [reviewers, setReviewers] = useState<User[]>([])
-  const [loading, setLoading] = useState(true)
+  const [tasks, setTasks] = useState<Task[]>(initialTasks)
+  const [users] = useState<User[]>(initialUsers)
   const [assigning, setAssigning] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -104,102 +97,12 @@ export function DashPage() {
     reviewerName: string
   } | null>(null)
 
-  const isAdmin = currentUser?.role === 'admin'
-
-  useEffect(() => {
-    let mounted = true
-
-    const loadDashboard = async () => {
-      setLoading(true)
-      setError(null)
-
-      try {
-        const [
-          { data: audioItems, error: audioError },
-          { data: reviews, error: reviewsError },
-        ] = await Promise.all([
-          supabase
-            .from('audio_items')
-            .select(
-              'id,title,transcript_original,created_at,assigned_to,duration_seconds'
-            )
-            .order('created_at', { ascending: false }),
-          supabase
-            .from('reviews')
-            .select('id,audio_id,decision,created_at')
-            .order('created_at', { ascending: false }),
-        ])
-
-        if (audioError) throw audioError
-        if (reviewsError) throw reviewsError
-
-        const reviewsByAudioId = new Map<string, ReviewRow[]>()
-
-        for (const review of (reviews ?? []) as ReviewRow[]) {
-          const current = reviewsByAudioId.get(review.audio_id) ?? []
-          current.push(review)
-          reviewsByAudioId.set(review.audio_id, current)
-        }
-
-        const mappedTasks: Task[] = ((audioItems ?? []) as AudioItemRow[]).map(
-          (item) => {
-            const itemReviews = reviewsByAudioId.get(item.id) ?? []
-
-            return {
-              id: item.id,
-              title: item.title,
-              transcription: item.transcript_original,
-              status: deriveTaskStatus(itemReviews),
-              createdAt: new Date(item.created_at),
-              assignedTo: item.assigned_to ?? undefined,
-              duration: formatDuration(item.duration_seconds),
-            }
-          }
-        )
-
-        let fetchedReviewers: User[] = []
-
-        if (currentUser?.role === 'admin') {
-          const usersRes = await fetch('/api/admin/users')
-          const usersJson = await usersRes.json()
-
-          if (!usersRes.ok) {
-            throw new Error(usersJson.error || 'Failed to fetch reviewers')
-          }
-
-          fetchedReviewers = usersJson.users ?? []
-        }
-
-        if (!mounted) return
-        setTasks(mappedTasks)
-        setReviewers(fetchedReviewers)
-      } catch (err) {
-        if (!mounted) return
-        setError(
-          err instanceof Error ? err.message : 'Failed to load dashboard'
-        )
-      } finally {
-        if (mounted) setLoading(false)
-      }
-    }
-
-    if (currentUser) {
-      loadDashboard()
-    } else {
-      setLoading(false)
-      setTasks([])
-      setReviewers([])
-    }
-    return () => {
-      mounted = false
-    }
-  }, [currentUser])
+  const isAdmin = currentUserRole === 'admin'
 
   const visibleTasks = useMemo(() => {
     if (isAdmin) return tasks
-
-    return tasks.filter((t) => t.assignedTo === currentUser?.id)
-  }, [tasks, isAdmin, currentUser?.id])
+    return tasks.filter((t) => t.assignedTo === currentUserId)
+  }, [tasks, isAdmin, currentUserId])
 
   const filteredTasks = useMemo(() => {
     return statusFilter === 'all'
@@ -213,7 +116,7 @@ export function DashPage() {
 
   const getAssigneeName = (userId?: string) => {
     if (!userId) return undefined
-    return reviewers.find((u) => u.id === userId)?.name ?? userId.slice(0, 8)
+    return users.find((u) => u.id === userId)?.name ?? userId.slice(0, 8)
   }
 
   const toggleSelect = (taskId: string) => {
@@ -239,7 +142,7 @@ export function DashPage() {
 
   const requestBulkAssign = (userId: string | undefined) => {
     const reviewerName = userId
-      ? (reviewers.find((u) => u.id === userId)?.name ?? 'selected user')
+      ? (users.find((u) => u.id === userId)?.name ?? 'selected user')
       : 'Unassigned'
 
     setPendingAssignment({
@@ -324,7 +227,7 @@ export function DashPage() {
         </div>
       )}
 
-      {currentUser?.role === 'reviewer' && visibleTasks.length === 0 && (
+      {!isAdmin && visibleTasks.length === 0 && (
         <div className="p-12 text-center bg-zinc-50 rounded-xl border border-dashed border-zinc-200">
           <UserIcon className="h-10 w-10 text-zinc-300 mx-auto mb-4" />
           <h3 className="text-lg font-semibold text-zinc-900 mb-1">
@@ -337,14 +240,7 @@ export function DashPage() {
       )}
 
       <div className="space-y-6">
-        {loading ? (
-          <>
-            <SectionSkeleton title="Pending Review" viewMode={viewMode} />
-            {showSections && (
-              <SectionSkeleton title="Completed" viewMode={viewMode} />
-            )}
-          </>
-        ) : showSections ? (
+        {showSections ? (
           <>
             <TaskSection
               title="Pending Review"
@@ -404,7 +300,7 @@ export function DashPage() {
       {selectedIds.size > 0 && (
         <BulkActionBar
           count={selectedIds.size}
-          reviewers={reviewers}
+          reviewers={users}
           onAssign={requestBulkAssign}
           onClear={clearSelection}
           isLoading={assigning}
@@ -1007,77 +903,6 @@ function TaskRow({
         className="h-4 w-4 text-zinc-300 group-hover:text-zinc-500 transition-colors shrink-0 cursor-pointer"
         onClick={() => onNavigate('review', task.id)}
       />
-    </div>
-  )
-}
-
-function SectionSkeleton({
-  title,
-  viewMode,
-}: {
-  title: string
-  viewMode: ViewMode
-}) {
-  return (
-    <section>
-      <div className="flex items-center justify-between mb-4">
-        <div className="h-6 w-40 rounded bg-zinc-200 animate-pulse" />
-        <div className="h-8 w-24 rounded bg-zinc-200 animate-pulse" />
-      </div>
-
-      {viewMode === 'card' ? (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <TaskCardSkeleton key={i} />
-          ))}
-        </div>
-      ) : (
-        <div className="rounded-xl border border-zinc-200 bg-white overflow-hidden">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <TaskRowSkeleton key={i} isLast={i === 5} />
-          ))}
-        </div>
-      )}
-    </section>
-  )
-}
-
-function TaskCardSkeleton() {
-  return (
-    <Card className="p-6 space-y-4">
-      <div className="flex items-start justify-between">
-        <div className="h-6 w-24 rounded bg-zinc-200 animate-pulse" />
-        <div className="h-4 w-12 rounded bg-zinc-200 animate-pulse" />
-      </div>
-
-      <div className="space-y-2">
-        <div className="h-5 w-3/4 rounded bg-zinc-200 animate-pulse" />
-        <div className="h-4 w-full rounded bg-zinc-100 animate-pulse" />
-        <div className="h-4 w-5/6 rounded bg-zinc-100 animate-pulse" />
-      </div>
-
-      <div className="pt-4 border-t border-zinc-100 flex items-center justify-between">
-        <div className="h-4 w-24 rounded bg-zinc-100 animate-pulse" />
-        <div className="h-4 w-16 rounded bg-zinc-100 animate-pulse" />
-      </div>
-    </Card>
-  )
-}
-
-function TaskRowSkeleton({ isLast }: { isLast: boolean }) {
-  return (
-    <div
-      className={`flex items-center gap-4 px-5 py-4 ${
-        !isLast ? 'border-b border-zinc-100' : ''
-      }`}
-    >
-      <div className="h-10 w-10 rounded-lg bg-zinc-200 animate-pulse shrink-0" />
-      <div className="flex-1 min-w-0 space-y-2">
-        <div className="h-4 w-1/3 rounded bg-zinc-200 animate-pulse" />
-        <div className="h-4 w-2/3 rounded bg-zinc-100 animate-pulse" />
-      </div>
-      <div className="h-4 w-16 rounded bg-zinc-100 animate-pulse shrink-0" />
-      <div className="h-5 w-20 rounded bg-zinc-200 animate-pulse shrink-0" />
     </div>
   )
 }

@@ -1,187 +1,306 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Play, Pause, Volume2 } from 'lucide-react'
-import { Button } from './ui/Button'
-import { cn } from '@/app/lib/utils'
+import WaveSurfer from 'wavesurfer.js'
+import {
+  Play,
+  Pause,
+  Volume2,
+  VolumeX,
+  Loader2,
+  RotateCcw,
+  RotateCw,
+  Gauge,
+  AlertCircle,
+} from 'lucide-react'
+import { Button } from '@/app/components/ui/Button'
+import { cn, formatTime } from '@/app/lib/utils'
 
 interface AudioPlayerProps {
   src?: string
-  duration?: string
+  title?: string
   className?: string
 }
 
-function formatTime(seconds: number) {
-  if (!Number.isFinite(seconds) || seconds < 0) return '00:00'
-
-  const mins = Math.floor(seconds / 60)
-  const secs = Math.floor(seconds % 60)
-
-  return `${mins.toString().padStart(2, '0')}:${secs
-    .toString()
-    .padStart(2, '0')}`
-}
-
-export function AudioPlayer({ src, duration, className }: AudioPlayerProps) {
-  const audioRef = useRef<HTMLAudioElement | null>(null)
+export function AudioPlayer({
+  src,
+  title = 'Audio clip',
+  className,
+}: AudioPlayerProps) {
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  const waveSurferRef = useRef<WaveSurfer | null>(null)
 
   const [isPlaying, setIsPlaying] = useState(false)
-  const [progress, setProgress] = useState(0)
-  const [currentTime, setCurrentTime] = useState(0)
-  const [audioDuration, setAudioDuration] = useState(0)
-  const [volume, setVolume] = useState(1)
   const [isReady, setIsReady] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const [currentTime, setCurrentTime] = useState(0)
+  const [duration, setDuration] = useState(0)
+  const [progress, setProgress] = useState(0)
+
+  const [volume, setVolume] = useState(1)
+  const [speed, setSpeed] = useState(1)
+
+  const speeds = [0.75, 1, 1.25, 1.5]
+
   useEffect(() => {
-    const audio = audioRef.current
-    if (!audio) return
-
-    const handleLoadedMetadata = () => {
-      setAudioDuration(audio.duration || 0)
-      setIsReady(true)
-      setError(null)
-    }
-
-    const handleTimeUpdate = () => {
-      const current = audio.currentTime || 0
-      const total = audio.duration || 0
-
-      setCurrentTime(current)
-      setProgress(total > 0 ? (current / total) * 100 : 0)
-    }
-
-    const handleEnded = () => {
-      setIsPlaying(false)
-      setProgress(100)
-    }
-
-    const handlePlay = () => setIsPlaying(true)
-    const handlePause = () => setIsPlaying(false)
-
-    const handleError = () => {
-      setError('Failed to load audio.')
+    if (!containerRef.current || !src) {
       setIsPlaying(false)
       setIsReady(false)
+      setIsLoading(false)
+      setCurrentTime(0)
+      setDuration(0)
+      setProgress(0)
+      setError(src ? 'Unable to load audio.' : null)
+      return
     }
 
-    audio.addEventListener('loadedmetadata', handleLoadedMetadata)
-    audio.addEventListener('timeupdate', handleTimeUpdate)
-    audio.addEventListener('ended', handleEnded)
-    audio.addEventListener('play', handlePlay)
-    audio.addEventListener('pause', handlePause)
-    audio.addEventListener('error', handleError)
+    let isMounted = true
+    let isCleaningUp = false
+
+    setIsLoading(true)
+    setIsReady(false)
+    setError(null)
+    setCurrentTime(0)
+    setDuration(0)
+    setProgress(0)
+    setIsPlaying(false)
+
+    if (waveSurferRef.current) {
+      try {
+        waveSurferRef.current.destroy()
+      } catch {}
+      waveSurferRef.current = null
+    }
+
+    const ws = WaveSurfer.create({
+      container: containerRef.current,
+      height: 72,
+      waveColor: '#d4d4d8',
+      progressColor: '#18181b',
+      cursorColor: '#27272a',
+      barWidth: 2,
+      barGap: 2,
+      barRadius: 4,
+      normalize: true,
+      dragToSeek: true,
+      autoScroll: false,
+      hideScrollbar: true,
+      interact: true,
+    })
+
+    waveSurferRef.current = ws
+
+    ws.on('load', () => {
+      if (!isMounted || isCleaningUp) return
+      setIsLoading(true)
+      setError(null)
+    })
+
+    ws.on('ready', () => {
+      if (!isMounted || isCleaningUp) return
+      const d = ws.getDuration()
+      setDuration(d)
+      setIsReady(true)
+      setIsLoading(false)
+      setError(null)
+      ws.setVolume(volume)
+      ws.setPlaybackRate(speed)
+    })
+
+    ws.on('play', () => {
+      if (!isMounted || isCleaningUp) return
+      setIsPlaying(true)
+    })
+
+    ws.on('pause', () => {
+      if (!isMounted || isCleaningUp) return
+      setIsPlaying(false)
+    })
+
+    ws.on('timeupdate', (time) => {
+      if (!isMounted || isCleaningUp) return
+      const d = ws.getDuration() || 0
+      setCurrentTime(time)
+      setProgress(d > 0 ? (time / d) * 100 : 0)
+    })
+
+    ws.on('finish', () => {
+      if (!isMounted || isCleaningUp) return
+      setIsPlaying(false)
+      setCurrentTime(ws.getDuration())
+      setProgress(100)
+    })
+
+    ws.on('error', (err) => {
+      if (!isMounted || isCleaningUp) return
+
+      const message =
+        err instanceof Error ? err.message : String(err ?? 'Unknown error')
+
+      if (message.toLowerCase().includes('aborted')) {
+        return
+      }
+
+      setIsLoading(false)
+      setIsReady(false)
+      setIsPlaying(false)
+      setError('Unable to load audio.')
+    })
+
+    Promise.resolve()
+      .then(() => ws.load(src))
+      .catch((err) => {
+        if (!isMounted || isCleaningUp) return
+
+        const message =
+          err instanceof Error ? err.message : String(err ?? 'Unknown error')
+
+        if (message.toLowerCase().includes('aborted')) {
+          return
+        }
+
+        setIsLoading(false)
+        setIsReady(false)
+        setIsPlaying(false)
+        setError('Unable to load audio.')
+      })
 
     return () => {
-      audio.removeEventListener('loadedmetadata', handleLoadedMetadata)
-      audio.removeEventListener('timeupdate', handleTimeUpdate)
-      audio.removeEventListener('ended', handleEnded)
-      audio.removeEventListener('play', handlePlay)
-      audio.removeEventListener('pause', handlePause)
-      audio.removeEventListener('error', handleError)
+      isMounted = false
+      isCleaningUp = true
+      try {
+        ws.destroy()
+      } catch {}
+      if (waveSurferRef.current === ws) {
+        waveSurferRef.current = null
+      }
     }
   }, [src])
 
   useEffect(() => {
-    const audio = audioRef.current
-    if (!audio) return
-    audio.volume = volume
+    waveSurferRef.current?.setVolume(volume)
   }, [volume])
 
   useEffect(() => {
-    const audio = audioRef.current
-    if (!audio) return
+    waveSurferRef.current?.setPlaybackRate(speed)
+  }, [speed])
 
-    setIsPlaying(false)
-    setProgress(0)
-    setCurrentTime(0)
-    setAudioDuration(0)
-    setIsReady(false)
-    setError(null)
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement | null)?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
 
-    audio.pause()
-    audio.load()
-  }, [src])
+      if (e.code === 'Space') {
+        e.preventDefault()
+        togglePlay()
+      }
+
+      if (e.code === 'ArrowRight') skip(5)
+      if (e.code === 'ArrowLeft') skip(-5)
+    }
+
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  })
 
   const togglePlay = async () => {
-    const audio = audioRef.current
-    if (!audio || !src) return
+    const ws = waveSurferRef.current
+    if (!ws || !src || !isReady) return
 
     try {
-      if (audio.paused) {
-        await audio.play()
-      } else {
-        audio.pause()
-      }
+      ws.playPause()
     } catch {
-      setError('Unable to play audio.')
+      setError('Playback failed.')
       setIsPlaying(false)
     }
   }
 
-  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const audio = audioRef.current
-    if (!audio) return
+  const skip = (seconds: number) => {
+    const ws = waveSurferRef.current
+    if (!ws || !isReady) return
 
-    const nextProgress = Number(e.target.value)
-    const total = audio.duration || 0
-    const nextTime = (nextProgress / 100) * total
-
-    audio.currentTime = nextTime
-    setProgress(nextProgress)
-    setCurrentTime(nextTime)
+    const d = ws.getDuration() || 0
+    const next = Math.max(0, Math.min(d, ws.getCurrentTime() + seconds))
+    ws.setTime(next)
   }
 
-  const waveformBars = useMemo(
-    () =>
-      Array.from({ length: 40 }).map((_, i) => ({
-        id: i,
-        height: `${Math.max(18, Math.abs(Math.sin(i * 1.7)) * 100)}%`,
-        played: (i / 40) * 100 < progress,
-      })),
-    [progress]
-  )
+  const seek = (value: number) => {
+    const ws = waveSurferRef.current
+    if (!ws || !duration || !isReady) return
 
-  const displayedDuration =
-    duration && duration !== '--:--' ? duration : formatTime(audioDuration)
+    const nextTime = (value / 100) * duration
+    ws.setTime(nextTime)
+  }
+
+  const toggleMute = () => {
+    setVolume((prev) => (prev === 0 ? 1 : 0))
+  }
+
+  const volumeIcon = useMemo(() => {
+    return volume === 0 ? (
+      <VolumeX className="h-4 w-4" />
+    ) : (
+      <Volume2 className="h-4 w-4" />
+    )
+  }, [volume])
 
   return (
     <div
       className={cn(
-        'bg-zinc-50 rounded-lg border border-zinc-200 p-4',
+        'rounded-2xl border border-zinc-200 bg-white shadow-sm',
         className
       )}
     >
-      <audio ref={audioRef} src={src} preload="metadata" />
-
-      <div className="flex items-center gap-4">
-        <Button
-          variant="primary"
-          size="icon"
-          className="rounded-full h-12 w-12 shrink-0"
-          onClick={togglePlay}
-          disabled={!src || !!error}
-        >
-          {isPlaying ? (
-            <Pause className="h-5 w-5" />
-          ) : (
-            <Play className="h-5 w-5 ml-1" />
-          )}
-        </Button>
-
-        <div className="flex-1 space-y-2">
-          <div className="h-12 flex items-center gap-0.5 opacity-80">
-            {waveformBars.map((bar) => (
-              <div
-                key={bar.id}
-                className={cn(
-                  'w-1 rounded-full transition-all duration-300',
-                  bar.played ? 'bg-zinc-900' : 'bg-zinc-300'
-                )}
-                style={{ height: bar.height }}
-              />
-            ))}
+      <div className="p-5 space-y-4">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <p className="font-medium text-zinc-900 truncate">{title}</p>
+            <p className="text-xs text-zinc-500 mt-1">
+              {error
+                ? 'Audio unavailable'
+                : isLoading
+                  ? 'Loading waveform...'
+                  : isReady
+                    ? 'Waveform ready'
+                    : 'Preparing player...'}
+            </p>
           </div>
+
+          <div className="shrink-0 text-xs font-mono text-zinc-500">
+            {formatTime(currentTime)} / {formatTime(duration)}
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-zinc-100 bg-zinc-50 px-3 py-2">
+          <div ref={containerRef} className="w-full" />
+        </div>
+
+        <div className="flex items-center gap-3">
+          <Button onClick={() => skip(-5)} size="icon" type="button">
+            <RotateCcw className="h-4 w-4" />
+          </Button>
+
+          <Button
+            onClick={togglePlay}
+            size="icon"
+            type="button"
+            className="h-12 w-12 rounded-full"
+            disabled={!src || !!error || !isReady}
+          >
+            {isLoading ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : isPlaying ? (
+              <Pause className="h-5 w-5" />
+            ) : (
+              <Play className="h-5 w-5 ml-0.5" />
+            )}
+          </Button>
+
+          <Button onClick={() => skip(5)} size="icon" type="button">
+            <RotateCw className="h-4 w-4" />
+          </Button>
 
           <input
             type="range"
@@ -189,31 +308,55 @@ export function AudioPlayer({ src, duration, className }: AudioPlayerProps) {
             max={100}
             step={0.1}
             value={progress}
-            onChange={handleSeek}
-            className="w-full"
-            disabled={!src || !isReady}
+            onChange={(e) => seek(Number(e.target.value))}
+            className="flex-1 accent-zinc-900"
+            disabled={!isReady}
           />
+        </div>
 
-          <div className="flex justify-between text-xs text-zinc-500 font-medium font-mono">
-            <span>{formatTime(currentTime)}</span>
-            <span>{displayedDuration}</span>
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={toggleMute}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-zinc-200 text-zinc-600 hover:bg-zinc-50 transition-colors"
+            >
+              {volumeIcon}
+            </button>
+
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.01}
+              value={volume}
+              onChange={(e) => setVolume(Number(e.target.value))}
+              className="w-24 accent-zinc-900"
+            />
           </div>
 
-          {error && <p className="text-xs text-red-600">{error}</p>}
+          <div className="flex items-center gap-2">
+            <Gauge className="h-4 w-4 text-zinc-500" />
+            <select
+              value={speed}
+              onChange={(e) => setSpeed(Number(e.target.value))}
+              className="rounded-md border border-zinc-200 bg-white px-2 py-1 text-sm text-zinc-700"
+            >
+              {speeds.map((s) => (
+                <option key={s} value={s}>
+                  {s}x
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2 text-zinc-400 min-w-[90px]">
-          <Volume2 className="h-5 w-5" />
-          <input
-            type="range"
-            min={0}
-            max={1}
-            step={0.01}
-            value={volume}
-            onChange={(e) => setVolume(Number(e.target.value))}
-            className="w-full"
-          />
-        </div>
+        {error && (
+          <div className="inline-flex items-center gap-1.5 text-xs text-red-600">
+            <AlertCircle className="h-3.5 w-3.5" />
+            {error}
+          </div>
+        )}
       </div>
     </div>
   )

@@ -6,9 +6,11 @@ import { Headphones, LogOut } from 'lucide-react'
 import { useAuth } from '@/app/hooks/useAuth'
 import { UserAvatar } from './ui/UserAvatar'
 import { usePathname, useRouter } from 'next/navigation'
+import { User } from '../types'
 
 interface LayoutProps {
   children: React.ReactNode
+  user: User
 }
 
 function pageKeyFromPath(path: string) {
@@ -19,10 +21,10 @@ function pageKeyFromPath(path: string) {
   return 'dashboard'
 }
 
-export function Layout({ children }: LayoutProps) {
+export function Layout({ children, user }: LayoutProps) {
   const router = useRouter()
   const pathname = usePathname()
-  const { user: currentUser, logout } = useAuth()
+  const { logout } = useAuth()
 
   const currentPage = useMemo(() => pageKeyFromPath(pathname), [pathname])
 
@@ -74,7 +76,7 @@ export function Layout({ children }: LayoutProps) {
                 Dashboard
               </button>
 
-              {currentUser?.role === 'admin' && (
+              {user.role === 'admin' && (
                 <>
                   <button
                     onClick={() => onNavigate('upload')}
@@ -101,18 +103,14 @@ export function Layout({ children }: LayoutProps) {
 
             <div className="flex items-center gap-3">
               <div className="flex flex-col items-end mr-1">
-                <span className="text-sm font-medium">{currentUser?.name}</span>
+                <span className="text-sm font-medium">{user.name}</span>
                 <span className="text-xs text-zinc-500 capitalize">
-                  {currentUser?.role}
+                  {user.role}
                 </span>
               </div>
 
               <div className="h-9 w-9 rounded-full bg-zinc-200 overflow-hidden ring-2 ring-white">
-                <UserAvatar
-                  id={currentUser?.id || ''}
-                  name={currentUser?.name || ''}
-                  size={36}
-                />
+                <UserAvatar id={user.id} name={user.name} size={36} />
               </div>
 
               <Button
