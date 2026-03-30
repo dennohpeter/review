@@ -64,6 +64,9 @@ export function ReviewInterface({ taskId }: ReviewInterfaceProps) {
 
   const touchStartX = useRef<number | null>(null)
   const touchEndX = useRef<number | null>(null)
+  const [pendingAction, setPendingAction] = useState<
+    'approve' | 'suggest' | null
+  >(null)
   const minSwipeDistance = 50
 
   const { user } = useAuth()
@@ -285,7 +288,12 @@ export function ReviewInterface({ taskId }: ReviewInterfaceProps) {
     }))
   }
 
-  const handleApprove = async () => {
+  const requestApprove = () => {
+    if (!task) return
+    setPendingAction('approve')
+  }
+
+  const confirmApprove = async () => {
     if (!task) return
 
     setSaving(true)
@@ -302,6 +310,7 @@ export function ReviewInterface({ taskId }: ReviewInterfaceProps) {
       if (error) throw error
 
       await refreshReviewsForTask(task.id)
+      setPendingAction(null)
       onNavigate('dashboard')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to approve')
@@ -310,7 +319,17 @@ export function ReviewInterface({ taskId }: ReviewInterfaceProps) {
     }
   }
 
-  const handleRequestChanges = async () => {
+  const requestSubmitChanges = () => {
+    if (!task) return
+    if (!suggestion.trim()) {
+      setError('Please enter suggested changes before submitting.')
+      return
+    }
+
+    setPendingAction('suggest')
+  }
+
+  const confirmSubmitChanges = async () => {
     if (!task) return
     if (!suggestion.trim()) {
       setError('Please enter suggested changes before submitting.')
@@ -331,6 +350,7 @@ export function ReviewInterface({ taskId }: ReviewInterfaceProps) {
       if (error) throw error
 
       await refreshReviewsForTask(task.id)
+      setPendingAction(null)
       onNavigate('dashboard')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to submit changes')
@@ -521,7 +541,7 @@ export function ReviewInterface({ taskId }: ReviewInterfaceProps) {
 
               <Button
                 variant="success"
-                onClick={handleApprove}
+                onClick={requestApprove}
                 disabled={saving}
                 className="h-10 rounded-xl shadow-sm"
               >
@@ -611,7 +631,7 @@ export function ReviewInterface({ taskId }: ReviewInterfaceProps) {
 
                   <Button
                     size="sm"
-                    onClick={handleRequestChanges}
+                    onClick={requestSubmitChanges}
                     isLoading={saving}
                     className="rounded-lg bg-amber-600 hover:bg-amber-700 text-white shadow-sm"
                   >
@@ -682,6 +702,56 @@ export function ReviewInterface({ taskId }: ReviewInterfaceProps) {
           <div className="mt-1 font-medium text-zinc-900">
             {pendingAssignment?.reviewerName}
           </div>
+          <div className="mt-3 text-sm text-zinc-600">
+            Task: {task?.title ?? 'Current task'}
+          </div>
+        </div>
+      </ConfirmModal>
+
+      <ConfirmModal
+        open={!!pendingAction}
+        title={
+          pendingAction === 'approve'
+            ? 'Approve this transcription?'
+            : 'Submit suggested changes?'
+        }
+        description={
+          pendingAction === 'approve'
+            ? `This will mark "${task?.title ?? 'this task'}" as approved.`
+            : `This will submit your suggested transcription changes for "${task?.title ?? 'this task'}".`
+        }
+        confirmText={
+          pendingAction === 'approve' ? 'Confirm Approve' : 'Confirm Submit'
+        }
+        cancelText="Cancel"
+        loading={saving}
+        onCancel={() => setPendingAction(null)}
+        onConfirm={() => {
+          if (pendingAction === 'approve') {
+            confirmApprove()
+            return
+          }
+
+          if (pendingAction === 'suggest') {
+            confirmSubmitChanges()
+          }
+        }}
+      >
+        <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
+          <div className="text-sm text-zinc-600">
+            {pendingAction === 'approve' ? 'Action' : 'Suggested text'}
+          </div>
+
+          {pendingAction === 'approve' ? (
+            <div className="mt-1 font-medium text-zinc-900">
+              Approve this transcription
+            </div>
+          ) : (
+            <div className="mt-2 whitespace-pre-wrap text-sm text-zinc-800 max-h-40 overflow-auto">
+              {suggestion.trim()}
+            </div>
+          )}
+
           <div className="mt-3 text-sm text-zinc-600">
             Task: {task?.title ?? 'Current task'}
           </div>
