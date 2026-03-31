@@ -36,6 +36,10 @@ export async function updateSession(request: NextRequest) {
     }
   )
 
+  //   const { data: { user } } =  await supabase.auth.getUser()
+
+  //   console.log('User in proxy:', user)
+
   // Do not run code between createServerClient and
   // supabase.auth.getClaims(). A simple mistake could make it very hard to debug
   // issues with users being randomly logged out.

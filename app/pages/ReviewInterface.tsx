@@ -8,7 +8,6 @@ import { Badge } from '@/app/components/ui/Badge'
 import { ConfirmModal } from '@/app/components/ui/ConfirmModal'
 import { AudioPlayer } from '@/app/components/AudioPlayer'
 import {
-  Check,
   X,
   ArrowLeft,
   Save,
@@ -21,13 +20,20 @@ import {
   Sparkles,
 } from 'lucide-react'
 import { supabase } from '@/app/lib/supabase/browser'
-import { ReviewRow, TaskStatus, AudioItemRow, Reviewer } from '@/app/types'
+import {
+  ReviewRow,
+  TaskStatus,
+  AudioItemRow,
+  Reviewer,
+  Task,
+} from '@/app/types'
 import { UserAvatar } from '@/app/components/ui/UserAvatar'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/app/hooks'
 
 interface ReviewInterfaceProps {
   taskId: string
+  tasks: Task[]
 }
 
 function deriveTaskStatus(reviews: ReviewRow[]): TaskStatus {
@@ -41,8 +47,12 @@ function shortTaskId(id?: string) {
   if (!id) return ''
   return id.slice(0, 8)
 }
-export function ReviewInterface({ taskId }: ReviewInterfaceProps) {
-  const [tasks, setTasks] = useState<AudioItemRow[]>([])
+
+export function ReviewInterface({
+  taskId,
+  tasks: initialTasks,
+}: ReviewInterfaceProps) {
+  const [taskRows, setTaskRows] = useState<AudioItemRow[]>([])
   const [reviewers, setReviewers] = useState<Reviewer[]>([])
   const [reviewsByAudioId, setReviewsByAudioId] = useState<
     Record<string, ReviewRow[]>
@@ -61,12 +71,12 @@ export function ReviewInterface({ taskId }: ReviewInterfaceProps) {
     userId?: string
     reviewerName: string
   } | null>(null)
-
-  const touchStartX = useRef<number | null>(null)
-  const touchEndX = useRef<number | null>(null)
   const [pendingAction, setPendingAction] = useState<
     'approve' | 'suggest' | null
   >(null)
+
+  const touchStartX = useRef<number | null>(null)
+  const touchEndX = useRef<number | null>(null)
   const minSwipeDistance = 50
 
   const { user } = useAuth()
@@ -95,6 +105,11 @@ export function ReviewInterface({ taskId }: ReviewInterfaceProps) {
 
     router.push('/')
   }
+
+  const goToTask = (id: string) => {
+    router.push(`/review/${id}`)
+  }
+
   useEffect(() => {
     let mounted = true
 
@@ -124,7 +139,7 @@ export function ReviewInterface({ taskId }: ReviewInterfaceProps) {
         if (audioError) throw audioError
         if (reviewsError) throw reviewsError
 
-        const taskRows = (audioItems ?? []) as AudioItemRow[]
+        const fetchedTaskRows = (audioItems ?? []) as AudioItemRow[]
 
         const groupedReviews: Record<string, ReviewRow[]> = {}
         for (const review of (reviews ?? []) as ReviewRow[]) {
@@ -134,7 +149,7 @@ export function ReviewInterface({ taskId }: ReviewInterfaceProps) {
         }
 
         let reviewerRows: Reviewer[] = []
-        if (user?.role === 'admin') {
+        if (user.role === 'admin') {
           const reviewerRes = await fetch('/api/admin/users')
           const reviewerJson = await reviewerRes.json()
 
@@ -144,7 +159,7 @@ export function ReviewInterface({ taskId }: ReviewInterfaceProps) {
         }
 
         if (!mounted) return
-        setTasks(taskRows)
+        setTaskRows(fetchedTaskRows)
         setReviewsByAudioId(groupedReviews)
         setReviewers(reviewerRows)
       } catch (err) {
@@ -165,17 +180,25 @@ export function ReviewInterface({ taskId }: ReviewInterfaceProps) {
 
   const visibleTasks = useMemo(() => {
     if (!user) return []
-    if (user?.role === 'admin') return tasks
-    return tasks.filter((t) => t.assigned_to === user.id)
-  }, [tasks, user])
+    if (user.role === 'admin') return initialTasks
+    return initialTasks.filter((t) => t.assignedTo === user.id)
+  }, [initialTasks, user])
 
-  const currentIndex = visibleTasks.findIndex((t) => t.id === taskId)
-  const task = currentIndex >= 0 ? visibleTasks[currentIndex] : undefined
+  const currentIndex = useMemo(() => {
+    return visibleTasks.findIndex((t) => t.id === taskId)
+  }, [visibleTasks, taskId])
+
+  const navTask = currentIndex >= 0 ? visibleTasks[currentIndex] : undefined
   const prevTask = currentIndex > 0 ? visibleTasks[currentIndex - 1] : undefined
   const nextTask =
     currentIndex >= 0 && currentIndex < visibleTasks.length - 1
       ? visibleTasks[currentIndex + 1]
       : undefined
+
+  const task = useMemo(() => {
+    if (!navTask) return undefined
+    return taskRows.find((t) => t.id === navTask.id)
+  }, [navTask, taskRows])
 
   const taskReviews = task ? (reviewsByAudioId[task.id] ?? []) : []
   const status = deriveTaskStatus(taskReviews)
@@ -240,17 +263,24 @@ export function ReviewInterface({ taskId }: ReviewInterfaceProps) {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (mode === 'edit') return
+
+      const tag = (e.target as HTMLElement | null)?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return
+
       if (e.key === 'ArrowLeft' && prevTask?.id) {
-        onNavigate('review', prevTask.id)
+        e.preventDefault()
+        goToTask(prevTask.id)
       }
+
       if (e.key === 'ArrowRight' && nextTask?.id) {
-        onNavigate('review', nextTask.id)
+        e.preventDefault()
+        goToTask(nextTask.id)
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [prevTask?.id, nextTask?.id, onNavigate, mode])
+  }, [prevTask?.id, nextTask?.id, mode])
 
   const onTouchStart = (e: React.TouchEvent) => {
     touchEndX.current = null
@@ -266,10 +296,10 @@ export function ReviewInterface({ taskId }: ReviewInterfaceProps) {
     const distance = touchStartX.current - touchEndX.current
 
     if (distance > minSwipeDistance && nextTask?.id) {
-      onNavigate('review', nextTask.id)
+      goToTask(nextTask.id)
     }
     if (distance < -minSwipeDistance && prevTask?.id) {
-      onNavigate('review', prevTask.id)
+      goToTask(prevTask.id)
     }
   }
 
@@ -389,7 +419,7 @@ export function ReviewInterface({ taskId }: ReviewInterfaceProps) {
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || 'Failed to assign reviewer')
 
-      setTasks((prev) =>
+      setTaskRows((prev) =>
         prev.map((t) =>
           t.id === task.id
             ? { ...t, assigned_to: pendingAssignment.userId ?? null }
@@ -475,7 +505,7 @@ export function ReviewInterface({ taskId }: ReviewInterfaceProps) {
             size="icon"
             className="h-8 w-8 rounded-full"
             disabled={loading || !prevTask}
-            onClick={() => prevTask && onNavigate('review', prevTask.id)}
+            onClick={() => prevTask && goToTask(prevTask.id)}
             title="Previous Task (Left Arrow)"
           >
             <ChevronLeft className="h-4 w-4" />
@@ -492,7 +522,7 @@ export function ReviewInterface({ taskId }: ReviewInterfaceProps) {
             size="icon"
             className="h-8 w-8 rounded-full"
             disabled={loading || !nextTask}
-            onClick={() => nextTask && onNavigate('review', nextTask.id)}
+            onClick={() => nextTask && goToTask(nextTask.id)}
             title="Next Task (Right Arrow)"
           >
             <ChevronRight className="h-4 w-4" />
@@ -767,12 +797,12 @@ export function ReviewInterface({ taskId }: ReviewInterfaceProps) {
         onCancel={() => setPendingAction(null)}
         onConfirm={() => {
           if (pendingAction === 'approve') {
-            confirmApprove()
+            void confirmApprove()
             return
           }
 
           if (pendingAction === 'suggest') {
-            confirmSubmitChanges()
+            void confirmSubmitChanges()
           }
         }}
       >

@@ -50,10 +50,17 @@ export function Layout({ children, user }: LayoutProps) {
         router.push('/')
     }
   }
+
   const { isWarningOpen, secondsLeft, staySignedIn, logoutNow } = useIdleLogout(
     {
-      timeoutMs: 15 * 60 * 1000, // 15 minutes
-      warningMs: 2 * 60 * 1000, // 2 minutes
+      timeoutMs:
+        parseInt(process.env.NEXT_PUBLIC_IDLE_TIMEOUT_MINUTES || '30') *
+        60 *
+        1000,
+      warningMs:
+        parseInt(process.env.NEXT_PUBLIC_IDLE_WARNING_MINUTES || '5') *
+        60 *
+        1000,
       enabled: !!user, // only enable if user is logged in
     }
   )
